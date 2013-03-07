@@ -63,7 +63,7 @@ public:
 	virtual unsigned int GetPathFinderType() const = 0;
 	virtual boost::uint32_t GetPathCheckSum() const { return 0; }
 
-	enum PathRequestType { PATH_NONE, REQUEST_PATH, NEXT_WAYPOINT, DELETE_PATH, UPDATE_PATH, TERRAIN_CHANGE, PATH_UPDATED };
+	enum PathRequestType { PATH_NONE, REQUEST_PATH, CUR_WAYPOINT, NEXT_WAYPOINT, DELETE_PATH, UPDATE_PATH, TERRAIN_CHANGE, PATH_UPDATED };
 
 #if DEBUG_THREADED_PATH
 	struct ScopedDisableThreadingDummy {};
@@ -96,9 +96,10 @@ public:
 	void Update(MT_WRAP int unused = 0);
 
 	struct PathData {
-		PathData() : pathID(-1), nextWayPoint(ZeroVector), updated(false), deleted(false) {}
-		PathData(int pID, const float3& nwp) : pathID(pID), nextWayPoint(nwp), updated(false), deleted(false) {}
+		PathData() : pathID(-1), curWayPoint(ZeroVector), nextWayPoint(ZeroVector), updated(false), deleted(false) {}
+		PathData(int pID, const float3& nwp) : pathID(pID), curWayPoint(nwp), nextWayPoint(nwp), updated(false), deleted(false) {}
 		int pathID;
+		float3 curWayPoint;
 		float3 nextWayPoint;
 		bool updated;
 		bool deleted;
