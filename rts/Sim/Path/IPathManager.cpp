@@ -139,25 +139,23 @@ float3 IPathManager::NextWayPoint(
 	float radius,
 	bool synced
 	) {
-		bool curwp = (owner != NULL) && (owner->pos == callerPos);
 		if (!Threading::threadedPath) {
 			if (!modInfo.asyncPathFinder)
 				return NextWayPoint(ST_CALL owner, pathID, numRetries, callerPos, radius, synced);
 			PathData* p = GetPathData(pathID);
 			if (p == NULL || p->pathID < 0)
 				return callerPos;
-			float3& wp = curwp ? p->curWayPoint : p->nextWayPoint;
-			wp = NextWayPoint(ST_CALL owner, p->pathID, numRetries, callerPos, radius, synced);
-			return wp;
+			p->nextWayPoint = NextWayPoint(ST_CALL owner, p->pathID, numRetries, callerPos, radius, synced);
+			return p->nextWayPoint;
 		}
 		PathData* p;
 		NOTIFY_PATH_THREAD(
 			p = GetNewPathData(pathID);
-			pathOps.push_back(PathOpData(curwp ? CUR_WAYPOINT : NEXT_WAYPOINT, owner, pathID, numRetries, callerPos, radius, synced));
+			pathOps.push_back(PathOpData(NEXT_WAYPOINT, owner, pathID, numRetries, callerPos, radius, synced));
 		)
 		if (p == NULL || p->pathID < 0)
 			return callerPos;
-		return curwp ? p->curWayPoint : p->nextWayPoint;
+		return p->nextWayPoint;
 }
 
 
@@ -240,11 +238,6 @@ void IPathManager::AsynchronousThread() {
 					newPathCache[cid.pathID] = pid;
 					pathUpdates[cid.pathID].push_back(PathUpdateData(REQUEST_PATH, pid));
 					break;
-				case CUR_WAYPOINT:
-					pid = GetPathID(cid.pathID);
-					if (pid >= 0)
-						pathUpdates[cid.pathID].push_back(PathUpdateData(CUR_WAYPOINT, NextWayPoint(ST_CALL cid.owner, pid, cid.numRetries, cid.startPos, cid.minDistance, cid.synced)));
-					break;
 				case NEXT_WAYPOINT:
 					pid = GetPathID(cid.pathID);
 					if (pid >= 0)
@@ -309,9 +302,6 @@ void IPathManager::SynchronizeThread() {
 			switch(u.type) {
 				case REQUEST_PATH:
 					pathInfos[i->first].pathID = u.pathID;
-					break;
-				case CUR_WAYPOINT:
-					pathInfos[i->first].curWayPoint = u.wayPoint;
 					break;
 				case NEXT_WAYPOINT:
 					pathInfos[i->first].nextWayPoint = u.wayPoint;
