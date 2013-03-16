@@ -447,7 +447,7 @@ void CDynWater::Update()
 
 void CDynWater::DrawReflection(CGame* game)
 {
-	const bool shadowsLoaded = shadowHandler->shadowsLoaded;
+//	const bool shadowsLoaded = shadowHandler->shadowsLoaded;
 
 //	CCamera* realCam = camera;
 //	camera = new CCamera(*realCam);
@@ -515,6 +515,7 @@ void CDynWater::DrawReflection(CGame* game)
 //	camera = realCam;
 	camera->~CCamera();
 	new (camera) CCamera(*(reinterpret_cast<CCamera*>(realCam)));
+	reinterpret_cast<CCamera*>(realCam)->~CCamera();
 
 	camera->Update();
 }

@@ -450,20 +450,26 @@ void CBasicTreeDrawer::AddTree(int treeID, int treeType, const float3& pos, floa
 	ts.type = treeType;
 	ts.pos = pos;
 
-	const int hash = (int)pos.x + (((int)pos.z) * 20000);
-	const int square = (((int)pos.x) / (SQUARE_SIZE * TREE_SQUARE_SIZE)) + (((int)pos.z) / (SQUARE_SIZE * TREE_SQUARE_SIZE) * treesX);
-	trees[square].trees[hash] = ts;
+	const int treeSquareSize = SQUARE_SIZE * TREE_SQUARE_SIZE;
+	const int treeSquareIdx =
+		(((int)pos.x) / (treeSquareSize)) +
+		(((int)pos.z) / (treeSquareSize) * treesX);
+
+	trees[treeSquareIdx].trees[treeID] = ts;
 	ResetPos(pos);
 }
 
-void CBasicTreeDrawer::DeleteTree(const float3& pos)
+void CBasicTreeDrawer::DeleteTree(int treeID, const float3& pos)
 {
 	GML_STDMUTEX_LOCK(tree); // DeleteTree
 
-	const int hash = (int)pos.x + (((int)pos.z) * 20000);
-	const int square = (((int)pos.x) / (SQUARE_SIZE * TREE_SQUARE_SIZE)) + (((int)pos.z) / (SQUARE_SIZE*TREE_SQUARE_SIZE) * treesX);
+	const int treeSquareSize = SQUARE_SIZE * TREE_SQUARE_SIZE;
+	const int treeSquareIdx =
+		(((int)pos.x) / (treeSquareSize)) +
+		(((int)pos.z) / (treeSquareSize) * treesX);
 
-	trees[square].trees.erase(hash);
+	trees[treeSquareIdx].trees.erase(treeID);
 
 	ResetPos(pos);
 }
+

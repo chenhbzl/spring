@@ -24,11 +24,8 @@ SET(sources_engine_System_common
 		"${CMAKE_CURRENT_SOURCE_DIR}/LoadSave/Demo.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/LoadSave/DemoReader.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/LoadSave/DemoRecorder.cpp"
-		"${CMAKE_CURRENT_SOURCE_DIR}/LoadSave/LoadInterface.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/LoadSave/LoadSaveHandler.cpp"
-		"${CMAKE_CURRENT_SOURCE_DIR}/LoadSave/LoadSaveInterface.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/LoadSave/LuaLoadSaveHandler.cpp"
-		"${CMAKE_CURRENT_SOURCE_DIR}/LoadSave/SaveInterface.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/LogOutput.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Main.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Matrix44f.cpp"
@@ -50,6 +47,7 @@ SET(sources_engine_System_common
 		"${CMAKE_CURRENT_SOURCE_DIR}/Platform/Threading.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Platform/Watchdog.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Platform/WindowManagerHelper.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/Rectangle.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/SafeVector.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/SafeCStrings.c"
 		"${CMAKE_CURRENT_SOURCE_DIR}/SpringApp.cpp"
@@ -76,6 +74,7 @@ SET(sources_engine_System_creg
 		"${CMAKE_CURRENT_SOURCE_DIR}/creg/Serializer.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/creg/VarTypes.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/creg/creg.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/creg/creg_runtime_tests.cpp"
 	)
 SET(sources_engine_System_FileSystem
 		"${CMAKE_CURRENT_SOURCE_DIR}/FileSystem/ArchiveLoader.cpp"

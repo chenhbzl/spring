@@ -13,7 +13,6 @@
 #include "System/Matrix44f.h"
 #include "System/Log/ILog.h"
 
-CR_BIND(CCollisionHandler, );
 
 unsigned int CCollisionHandler::numDiscTests = 0;
 unsigned int CCollisionHandler::numContTests = 0;
@@ -458,6 +457,11 @@ bool CCollisionHandler::IntersectEllipsoid(const CollisionVolume* v, const float
 	return false;
 }
 
+#if defined(USE_GML) && defined(__GNUC__) && (__GNUC__ == 4)
+// This is supposed to fix some GCC crashbug related to threading
+// The MOVAPS SSE instruction is otherwise getting misaligned data
+__attribute__ ((force_align_arg_pointer))
+#endif
 bool CCollisionHandler::IntersectCylinder(const CollisionVolume* v, const float3& pi0, const float3& pi1, CollisionQuery* q)
 {
 	const int pAx = v->GetPrimaryAxis();

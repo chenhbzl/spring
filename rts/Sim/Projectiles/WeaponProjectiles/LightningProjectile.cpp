@@ -13,33 +13,31 @@
 	#include "System/Sync/SyncTracer.h"
 #endif
 
-CR_BIND_DERIVED(CLightningProjectile, CWeaponProjectile, (ProjectileParams(), ZeroVector));
+CR_BIND_DERIVED(CLightningProjectile, CWeaponProjectile, (ProjectileParams()));
 
 CR_REG_METADATA(CLightningProjectile,(
 	CR_SETFLAG(CF_Synced),
 	CR_MEMBER(color),
-	CR_MEMBER(weapon),
 	CR_MEMBER(displacements),
-	CR_MEMBER(displacements2),
-	CR_RESERVED(16)
+	CR_MEMBER(displacements2)
 ));
 
-CLightningProjectile::CLightningProjectile(const ProjectileParams& params, const float3& color)
-	: CWeaponProjectile(params, true)
-	, color(color)
+CLightningProjectile::CLightningProjectile(const ProjectileParams& params): CWeaponProjectile(params, true)
 {
 	projectileType = WEAPON_LIGHTNING_PROJECTILE;
+
 	checkCol = false; // FIXME?
 	drawRadius = pos.distance(targetPos);
 	// SetRadiusAndHeight(pos.distance(targetPos), 0.0f);
 
+	if (weaponDef != NULL)
+		color = weaponDef->visuals.color;
+
 	displacements[0] = 0.0f;
+	displacements2[0] = 0.0f;
+
 	for (size_t d = 1; d < displacements_size; ++d) {
 		displacements[d]  = (gs->randFloat() - 0.5f) * drawRadius * 0.05f;
-	}
-
-	displacements2[0] = 0.0f;
-	for (size_t d = 1; d < displacements_size; ++d) {
 		displacements2[d] = (gs->randFloat() - 0.5f) * drawRadius * 0.05f;
 	}
 
@@ -47,8 +45,6 @@ CLightningProjectile::CLightningProjectile(const ProjectileParams& params, const
 	tracefile << "New lightning: ";
 	tracefile << pos.x << " " << pos.y << " " << pos.z << " " << end.x << " " << end.y << " " << end.z << "\n";
 #endif
-
-	cegID = gCEG->Load(explGenHandler, (weaponDef != NULL)? weaponDef->cegTag: "");
 }
 
 void CLightningProjectile::Update()

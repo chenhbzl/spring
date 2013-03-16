@@ -28,7 +28,7 @@
 #include "System/creg/STL_List.h"
 #include "lib/gml/gmlmut.h"
 
-static void ProjectileCollisionThreadFuncStatic(bool threaded) { ph->ProjectileCollisionThreadFunc(threaded); }
+static void ProjectileCollisionThreadFuncStatic(bool threaded) { projectileHandler->ProjectileCollisionThreadFunc(threaded); }
 
 // reserve 5% of maxNanoParticles for important stuff such as capture and reclaim other teams' units
 #define NORMAL_NANO_PRIO 0.95f
@@ -40,7 +40,7 @@ using namespace std;
 CONFIG(int, MaxParticles).defaultValue(1000);
 CONFIG(int, MaxNanoParticles).defaultValue(2500);
 
-CProjectileHandler* ph;
+CProjectileHandler* projectileHandler = NULL;
 
 
 CR_BIND_TEMPLATE(ProjectileContainer, )
@@ -58,11 +58,28 @@ CR_BIND(CProjectileHandler, );
 CR_REG_METADATA(CProjectileHandler, (
 	CR_MEMBER(syncedProjectiles),
 	CR_MEMBER(unsyncedProjectiles),
-	CR_MEMBER(syncedProjectileIDs),
-	CR_MEMBER(freeSyncedIDs),
+	//CR_MEMBER(flyingPieces3DO),
+	//CR_MEMBER(flyingPiecesS3O),
+	//CR_MEMBER(groundFlashes),
+
+	CR_MEMBER(maxParticles),
+	CR_MEMBER(maxNanoParticles),
+	CR_MEMBER(currentParticles),
+	CR_MEMBER(currentNanoParticles),
+	CR_MEMBER(particleSaturation),
+	CR_MEMBER(nanoParticleSaturation),
+
 	CR_MEMBER(maxUsedSyncedID),
-	CR_MEMBER(groundFlashes),
-	CR_RESERVED(32),
+	CR_MEMBER(maxUsedUnsyncedID),
+
+	//CR_MEMBER(syncedRenderProjectileIDs),
+	//CR_MEMBER(unsyncedRenderProjectileIDs),
+
+	CR_MEMBER(freeSyncedIDs),
+	CR_MEMBER(freeUnsyncedIDs),
+	CR_MEMBER(syncedProjectileIDs),
+	CR_MEMBER(unsyncedProjectileIDs),
+
 	CR_SERIALIZER(Serialize),
 	CR_POSTLOAD(PostLoad)
 ));
@@ -104,8 +121,6 @@ CProjectileHandler::~CProjectileHandler()
 
 	syncedProjectileIDs.clear();
 	unsyncedProjectileIDs.clear();
-
-	ph = NULL;
 
 	CCollisionHandler::PrintStats();
 }
@@ -211,7 +226,7 @@ void CProjectileHandler::UpdateProjectileContainer(ProjectileContainer& pc, bool
 			PROJECTILE_SANITY_CHECK(p);
 
 			p->Update();
-			qf->MovedProjectile(p);
+			quadField->MovedProjectile(p);
 
 			PROJECTILE_SANITY_CHECK(p);
 			GML::GetTicks(p->lastProjUpdate);
@@ -307,7 +322,7 @@ void CProjectileHandler::AddProjectile(CProjectile* p)
 {
 	// already initialized?
 	assert(p->id < 0);
-	
+
 	std::list<int>* freeIDs = NULL;
 	ProjectileMap* proIDs = NULL;
 	ProjectileRenderMap* newProIDs = NULL;
@@ -347,7 +362,7 @@ void CProjectileHandler::AddProjectile(CProjectile* p)
 	if ((*maxUsedID) > (1 << 24)) {
 		LOG_L(L_WARNING, "Lua %s projectile IDs are now out of range", (p->synced? "synced": "unsynced"));
 	}
-	
+
 	if (p->synced) {
 		ASSERT_SYNCED(newUsedID);
 	}
@@ -447,7 +462,7 @@ inline void CProjectileHandler::CheckProjectileCollision(CProjectile *p) {
 		std::vector<CUnit *> units;
 		std::vector<CFeature *> features;
 
-		qf->StableGetUnitsAndFeaturesExact(p->pos, p->radius + speedf, units, features);
+		quadField->StableGetUnitsAndFeaturesExact(p->pos, p->radius + speedf, units, features);
 
 		CheckUnitCollisions(p, units, ppos0, ppos1);
 		CheckFeatureCollisions(p, features, ppos0, ppos1);

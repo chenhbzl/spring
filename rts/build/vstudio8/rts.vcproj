@@ -6466,27 +6466,11 @@
 					>
 				</File>
 				<File
-					RelativePath="..\..\System\LoadSave\LoadInterface.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\..\System\LoadSave\LoadInterface.h"
-					>
-				</File>
-				<File
 					RelativePath="..\..\System\LoadSave\LoadSaveHandler.cpp"
 					>
 				</File>
 				<File
 					RelativePath="..\..\System\LoadSave\LoadSaveHandler.h"
-					>
-				</File>
-				<File
-					RelativePath="..\..\System\LoadSave\LoadSaveInterface.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\..\System\LoadSave\LoadSaveInterface.h"
 					>
 				</File>
 				<File
@@ -6569,14 +6553,6 @@
 					RelativePath="..\..\System\LoadSave\LuaLoadSaveHandler.h"
 					>
 				</File>
-				<File
-					RelativePath="..\..\System\LoadSave\SaveInterface.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\..\System\LoadSave\SaveInterface.h"
-					>
-				</File>
 			</Filter>
 			<Filter
 				Name="creg"
@@ -6587,6 +6563,14 @@
 				</File>
 				<File
 					RelativePath="..\..\System\creg\creg.h"
+					>
+				</File>
+				<File
+					RelativePath="..\..\System\creg\creg_runtime_tests.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\System\creg\creg_runtime_tests.h"
 					>
 				</File>
 				<File

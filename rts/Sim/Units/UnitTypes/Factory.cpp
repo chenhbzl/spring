@@ -37,7 +37,11 @@ CR_REG_METADATA(CFactory, (
 	CR_MEMBER(curBuild),
 	CR_MEMBER(nextBuildUnitDefID),
 	CR_MEMBER(lastBuildUpdateFrame),
-	CR_RESERVED(16),
+	CR_MEMBER(curBuildDef),
+	CR_MEMBER(curBuild),
+	//CR_MEMBER(finishedBuildFunc), FIXME is pointer
+	CR_MEMBER(finishedBuildCommand),
+	CR_MEMBER(nanoPieceCache),
 	CR_POSTLOAD(PostLoad)
 ));
 
@@ -162,7 +166,7 @@ void CFactory::SlowUpdate(void)
 	// it is unneeded now that units can flow / push through a non-moving crowd
 	// (so we no longer have to override CBuilding::SlowUpdate either)
 	if (transporter == NULL) {
-		helper->BuggerOff(pos - float3(0.01f, 0, 0.02f), radius, true, true, team, NULL);
+		CGameHelper::BuggerOff(pos - float3(0.01f, 0, 0.02f), radius, true, true, team, NULL);
 	}
 
 	CBuilding::SlowUpdate();
@@ -283,7 +287,7 @@ unsigned int CFactory::QueueBuild(const UnitDef* buildeeDef, const Command& buil
 		return FACTORY_KEEP_BUILD_ORDER;
 	if (curBuild != NULL)
 		return FACTORY_KEEP_BUILD_ORDER;
-	if (uh->unitsByDefs[team][buildeeDef->id].size() >= buildeeDef->maxThisUnit)
+	if (unitHandler->unitsByDefs[team][buildeeDef->id].size() >= buildeeDef->maxThisUnit)
 		return FACTORY_SKIP_BUILD_ORDER;
 	if (teamHandler->Team(team)->AtUnitLimit())
 		return FACTORY_KEEP_BUILD_ORDER;
@@ -353,7 +357,7 @@ void CFactory::SendToEmptySpot(CUnit* unit)
 
 		testPos.y = ground->GetHeightAboveWater(testPos.x, testPos.z);
 
-		if (qf->GetSolidsExact(testPos, unit->radius * 1.5f).empty()) {
+		if (quadField->GetSolidsExact(testPos, unit->radius * 1.5f).empty()) {
 			foundPos = testPos; break;
 		}
 	}
@@ -497,5 +501,5 @@ void CFactory::CreateNanoParticle(bool highPriority)
 		+ (rightdir * relNanoFirePos.x);
 
 	// unsynced
-	ph->AddNanoParticle(nanoPos, curBuild->midPos, unitDef, team, highPriority);
+	projectileHandler->AddNanoParticle(nanoPos, curBuild->midPos, unitDef, team, highPriority);
 }

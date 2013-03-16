@@ -12,6 +12,7 @@
 #include "ISerializer.h"
 #include "System/Sync/SyncedPrimitive.h"
 
+
 namespace creg {
 
 	class IType;
@@ -26,6 +27,7 @@ namespace creg {
 		crInt,		crUInt,
 		crShort,	crUShort,
 		crChar,		crUChar,
+		crInt64,
 		crFloat,
 		crDouble,
 		crBool,
@@ -83,7 +85,7 @@ namespace creg {
 	{
 	public:
 		ClassBinder(const char* className, unsigned int cf, ClassBinder* base,
-				IMemberRegistrator** mreg, int instanceSize,
+				IMemberRegistrator** mreg, int instanceSize, int instanceAlignment, bool hasVTable,
 				void (*constructorProc)(void* instance),
 				void (*destructorProc)(void* instance));
 
@@ -93,6 +95,9 @@ namespace creg {
 		IMemberRegistrator** memberRegistrator;
 		const char* name;
 		int size; // size of an instance in bytes
+		int alignment;
+		bool hasVTable;
+
 		void (*constructor)(void* instance);
 		/**
 		 * Needed for classes without virtual destructor.
@@ -140,6 +145,7 @@ namespace creg {
 			const char* name;
 			boost::shared_ptr<IType> type;
 			unsigned int offset;
+			int alignment;
 			int flags; // combination of ClassMemberFlag's
 		};
 
@@ -153,8 +159,8 @@ namespace creg {
 		void* CreateInstance();
 		/// Calculate a checksum from the class metadata
 		void CalculateChecksum(unsigned int& checksum);
-		void AddMember(const char* name, boost::shared_ptr<IType> type, unsigned int offset);
-		void AddMember(const char* name, IType* type, unsigned int offset);
+		bool AddMember(const char* name, boost::shared_ptr<IType> type, unsigned int offset, int alignment);
+		bool AddMember(const char* name, IType* type, unsigned int offset, int alignment);
 		void SetMemberFlag(const char* name, ClassMemberFlag f);
 		Member* FindMember(const char* name);
 
@@ -173,7 +179,8 @@ namespace creg {
 		std::vector <Class*> derivedClasses;
 		ClassBinder* binder;
 		std::string name;
-		size_t size;
+		int size;
+		int alignment;
 		Class* base;
 		void (_DummyStruct::*serializeProc)(ISerializer& s);
 		void (_DummyStruct::*postLoadProc)();
@@ -203,7 +210,7 @@ namespace creg {
 			T& ct = *(T*)inst;
 			if (s->IsWriting()) {
 				int size = (int)ct.size();
-				s->SerializeInt(&size,sizeof(int));
+				s->SerializeInt(&size, sizeof(int));
 				for (int a = 0; a < size; a++) {
 					elemType->Serialize(s, &ct[a]);
 				}
@@ -247,6 +254,40 @@ namespace creg {
 			for (int a = 0; a < Size; a++)
 				elemType->Serialize(s, &array[a]);
 		}
+	};
+
+	template<typename T>
+	class BitArrayType : public IType
+	{
+	public:
+		boost::shared_ptr<IType> elemType;
+
+		BitArrayType(boost::shared_ptr<IType> et)
+			: elemType(et) {}
+		~BitArrayType() {}
+
+		void Serialize(ISerializer* s, void* inst) {
+			T* ct = (T*)inst;
+			if (s->IsWriting()) {
+				int size = (int)ct->size();
+				s->SerializeInt(&size, sizeof(int));
+				for (int a = 0; a < size; a++) {
+					bool b = (*ct)[a];
+					elemType->Serialize(s, &b);
+				}
+			} else {
+				int size;
+				s->SerializeInt(&size, sizeof(int));
+				ct->resize(size);
+				for (int a = 0; a < size; a++) {
+					bool b;
+					elemType->Serialize(s, &b);
+					(*ct)[a] = b;
+				}
+			}
+		}
+		std::string GetName() { return elemType->GetName() + "[]"; }
+		size_t GetSize() { return sizeof(T); }
 	};
 
 	class EmptyType : public IType
@@ -294,6 +335,28 @@ namespace creg {
 
 #include "TypeDeduction.h"
 
+// detect if c++11
+#if __cplusplus <= 199711L
+	template<typename t>
+	size_t alignof_() {
+		return (sizeof(t) > sizeof(int*)) ? sizeof(int*) : sizeof(t);
+	}
+	#define alignof(t) alignof_<t>()
+
+	template<typename T>
+	size_t alignofv(const T& v) {
+		return alignof(T);
+	}
+
+	template<typename T>
+	size_t alignofv(T& v) {
+		return alignof(T);
+	}
+#else
+	#define alignofv(v) alignof(v)
+#endif
+
+
 namespace creg {
 
 /** @def CR_DECLARE
@@ -302,13 +365,14 @@ namespace creg {
  */
 #define CR_DECLARE(TCls)	public:					\
 	static creg::ClassBinder binder;				\
+	typedef TCls MyType;							\
 	static creg::IMemberRegistrator* memberRegistrator;	 \
 	static void _ConstructInstance(void* d);			\
 	static void _DestructInstance(void* d);			\
-	typedef TCls MyType;							\
 	friend struct TCls##MemberRegistrator;			\
-	virtual creg::Class* GetClass() const;				\
-	inline static creg::Class* StaticClass() { return binder.class_; }
+	inline static creg::Class* StaticClass() { return binder.class_; } \
+	virtual creg::Class* GetClass() const; \
+	static const bool hasVTable = true;
 
 /** @def CR_DECLARE_STRUCT
  * Use this to declare a structure
@@ -323,8 +387,9 @@ namespace creg {
 	static void _ConstructInstance(void* d);			\
 	static void _DestructInstance(void* d);			\
 	friend struct TStr##MemberRegistrator;			\
-	creg::Class* GetClass() const;						\
-	inline static creg::Class* StaticClass() { return binder.class_; }
+	inline static creg::Class* StaticClass() { return binder.class_; } \
+	creg::Class* GetClass() const; \
+	static const bool hasVTable = false;
 
 /** @def CR_DECLARE_SUB
  * Use this to declare a sub class. This should be put in the class definition
@@ -345,7 +410,7 @@ namespace creg {
 	creg::Class* TCls::GetClass() const { return binder.class_; } \
 	void TCls::_ConstructInstance(void* d) { new(d) MyType ctor_args; } \
 	void TCls::_DestructInstance(void* d) { ((MyType*)d)->~MyType(); } \
-	creg::ClassBinder TCls::binder(#TCls, 0, &TBase::binder, &TCls::memberRegistrator, sizeof(TCls), TCls::_ConstructInstance, TCls::_DestructInstance);
+	creg::ClassBinder TCls::binder(#TCls, 0, &TBase::binder, &TCls::memberRegistrator, sizeof(TCls), alignof(TCls), TCls::hasVTable, TCls::_ConstructInstance, TCls::_DestructInstance);
 
 /** @def CR_BIND_DERIVED_SUB
  * Bind a derived class inside another class to creg
@@ -360,7 +425,7 @@ namespace creg {
 	creg::Class* TSuper::TCls::GetClass() const { return binder.class_; }  \
 	void TSuper::TCls::_ConstructInstance(void* d) { new(d) TCls ctor_args; }  \
 	void TSuper::TCls::_DestructInstance(void* d) { ((TCls*)d)->~TCls(); }  \
-	creg::ClassBinder TSuper::TCls::binder(#TSuper "::" #TCls, 0, &TBase::binder, &TSuper::TCls::memberRegistrator, sizeof(TSuper::TCls), TSuper::TCls::_ConstructInstance, TSuper::TCls::_DestructInstance);
+	creg::ClassBinder TSuper::TCls::binder(#TSuper "::" #TCls, 0, &TBase::binder, &TSuper::TCls::memberRegistrator, sizeof(TSuper::TCls), alignof(TCls), TCls::hasVTable, TSuper::TCls::_ConstructInstance, TSuper::TCls::_DestructInstance);
 
 /** @def CR_BIND
  * Bind a class not derived from CObject
@@ -373,14 +438,14 @@ namespace creg {
 	creg::Class* TCls::GetClass() const { return binder.class_; } \
 	void TCls::_ConstructInstance(void* d) { new(d) MyType ctor_args; } \
 	void TCls::_DestructInstance(void* d) { ((MyType*)d)->~MyType(); } \
-	creg::ClassBinder TCls::binder(#TCls, 0, 0, &TCls::memberRegistrator, sizeof(TCls), TCls::_ConstructInstance, TCls::_DestructInstance);
+	creg::ClassBinder TCls::binder(#TCls, 0, 0, &TCls::memberRegistrator, sizeof(TCls), alignof(TCls), TCls::hasVTable, TCls::_ConstructInstance, TCls::_DestructInstance);
 // Stupid GCC likes this template<> crap very much
 #define CR_BIND_TEMPLATE(TCls, ctor_args) \
 	template<> creg::IMemberRegistrator* TCls::memberRegistrator=0;	\
 	template<> creg::Class* TCls::GetClass() const { return binder.class_; } \
 	template<> void TCls::_ConstructInstance(void* d) { new(d) MyType ctor_args; } \
 	template<> void TCls::_DestructInstance(void* d) { ((MyType*)d)->~MyType(); } \
-	template<> creg::ClassBinder TCls::binder(#TCls, 0, 0, &TCls::memberRegistrator, sizeof(TCls), TCls::_ConstructInstance, TCls::_DestructInstance);
+	template<> creg::ClassBinder TCls::binder(#TCls, 0, 0, &TCls::memberRegistrator, sizeof(TCls), alignof(TCls), TCls::hasVTable, TCls::_ConstructInstance, TCls::_DestructInstance);
 
 /** @def CR_BIND_DERIVED_INTERFACE
  * Bind an abstract derived class
@@ -391,7 +456,7 @@ namespace creg {
 #define CR_BIND_DERIVED_INTERFACE(TCls, TBase)	\
 	creg::IMemberRegistrator* TCls::memberRegistrator=0;	\
 	creg::Class* TCls::GetClass() const { return binder.class_; } \
-	creg::ClassBinder TCls::binder(#TCls, (unsigned int)creg::CF_Abstract, &TBase::binder, &TCls::memberRegistrator, sizeof(TCls), 0, 0);
+	creg::ClassBinder TCls::binder(#TCls, (unsigned int)creg::CF_Abstract, &TBase::binder, &TCls::memberRegistrator, sizeof(TCls), alignof(TCls), TCls::hasVTable, 0, 0);
 
 /** @def CR_BIND_INTERFACE
  * Bind an abstract class
@@ -403,7 +468,7 @@ namespace creg {
 #define CR_BIND_INTERFACE(TCls)	\
 	creg::IMemberRegistrator* TCls::memberRegistrator=0;	\
 	creg::Class* TCls::GetClass() const { return binder.class_; } \
-	creg::ClassBinder TCls::binder(#TCls, (unsigned int)creg::CF_Abstract, 0, &TCls::memberRegistrator, sizeof(TCls), 0, 0);
+	creg::ClassBinder TCls::binder(#TCls, (unsigned int)creg::CF_Abstract, 0, &TCls::memberRegistrator, sizeof(TCls), alignof(TCls), TCls::hasVTable, 0, 0);
 
 /** @def CR_REG_METADATA
  * Binds the class metadata to the class itself
@@ -462,19 +527,28 @@ namespace creg {
  * For enumerated type members, @see CR_ENUM_MEMBER
  */
 #define CR_MEMBER(Member) \
-	class_->AddMember ( #Member, creg::GetType(null->Member), (unsigned int)(((char*)&null->Member)-((char*)0)))
+	class_->AddMember( #Member, creg::GetType(null->Member), (unsigned int)(((char*)&null->Member)-((char*)0)), alignofv(null->Member))
 
 /** @def CR_ENUM_MEMBER
  * Registers a class/struct member variable with an enumerated type
  */
 #define CR_ENUM_MEMBER(Member) \
-	class_->AddMember( #Member, creg::IType::CreateEnumeratedType(sizeof(null->Member)), (unsigned int)(((char*)&null->Member)-((char*)0)))
+	class_->AddMember( #Member, creg::IType::CreateEnumeratedType(sizeof(null->Member)), (unsigned int)(((char*)&null->Member)-((char*)0)), alignofv(null->Member))
 
 /** @def CR_IGNORED
  * Registers a member variable that isn't saved/loaded
  */
 #define CR_IGNORED(Member) \
-	class_->AddMember( #Member, new creg::IgnoredType(sizeof(null->Member)), (unsigned int)(((char*)&null->Member)-((char*)0)))
+	class_->AddMember( #Member, new creg::IgnoredType(sizeof(null->Member)), (unsigned int)(((char*)&null->Member)-((char*)0)), alignofv(null->Member))
+
+
+/** @def CR_MEMBER_UN
+ * Registers a member variable that is unsynced.
+ * It may be saved depending on the purpose.
+ * Currently works as CR_IGNORED.
+ */
+#define CR_MEMBER_UN(Member) \
+    CR_IGNORED( Member )
 
 
 /** @def CR_RESERVED
@@ -500,7 +574,7 @@ namespace creg {
  * - double, synced double
  */
 #define CR_RESERVED(Size) \
-	class_->AddMember("Reserved", new creg::EmptyType(Size), 0)
+	class_->AddMember("Reserved", new creg::EmptyType(Size), 0, 0)
 
 /** @def CR_SETFLAG
  * Set a flag for a class/struct.

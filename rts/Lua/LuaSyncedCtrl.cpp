@@ -27,6 +27,7 @@
 #include "Map/ReadMap.h"
 #include "Rendering/Env/IGroundDecalDrawer.h"
 #include "Rendering/Env/ITreeDrawer.h"
+#include "Rendering/Models/IModelParser.h"
 #include "Sim/Features/Feature.h"
 #include "Sim/Features/FeatureHandler.h"
 #include "Sim/Misc/CollisionVolume.h"
@@ -244,6 +245,9 @@ bool LuaSyncedCtrl::PushEntries(lua_State* L)
 	REGISTER_LUA_CFUNC(SetMapSquareTerrainType);
 	REGISTER_LUA_CFUNC(SetTerrainTypeData);
 
+	REGISTER_LUA_CFUNC(UnitWeaponFire);
+	REGISTER_LUA_CFUNC(UnitWeaponHoldFire);
+
 	REGISTER_LUA_CFUNC(SpawnProjectile);
 	REGISTER_LUA_CFUNC(SpawnCEG);
 
@@ -281,10 +285,10 @@ static inline CUnit* ParseRawUnit(lua_State* L, const char* caller, int index)
 		luaL_error(L, "%s(): Bad unitID", caller);
 	}
 	const int unitID = lua_toint(L, index);
-	if ((unitID < 0) || (static_cast<size_t>(unitID) >= uh->MaxUnits())) {
+	if ((unitID < 0) || (static_cast<size_t>(unitID) >= unitHandler->MaxUnits())) {
 		luaL_error(L, "%s(): Bad unitID: %d\n", caller, unitID);
 	}
-	CUnit* unit = uh->units[unitID];
+	CUnit* unit = unitHandler->units[unitID];
 	if (unit == NULL) {
 		return NULL;
 	}
@@ -330,7 +334,7 @@ static inline CProjectile* ParseProjectile(lua_State* L,
 	if (!lua_isnumber(L, index)) {
 		luaL_error(L, "%s(): Bad projectile ID", caller);
 	}
-	const ProjectileMapValPair* pmp = ph->GetMapPairBySyncedID(lua_toint(L, index));
+	const ProjectileMapValPair* pmp = projectileHandler->GetMapPairBySyncedID(lua_toint(L, index));
 	if (pmp == NULL) {
 		return NULL;
 	}
@@ -353,9 +357,8 @@ static bool ParseProjectileParams(lua_State* L, ProjectileParams& params, const 
 
 			if (lua_istable(L, -1)) {
 				float array[3] = {0.0f, 0.0f, 0.0f};
-				const int size = LuaUtils::ParseFloatArray(L, -1, array, 3);
 
-				if (size == 3) {
+				if (LuaUtils::ParseFloatArray(L, -1, array, 3) == 3) {
 				    if (key == "pos") {
 						params.pos = array;
 					} else if (key == "end") {
@@ -373,7 +376,11 @@ static bool ParseProjectileParams(lua_State* L, ProjectileParams& params, const 
 			}
 
 			if (lua_isnumber(L, -1)) {
-				if (key == "ttl") {
+				if (key == "owner") {
+					params.ownerID = lua_toint(L, -1);
+				} else if (key == "team") {
+					params.teamID = lua_toint(L, -1);
+				} else if (key == "ttl") {
 					params.ttl = lua_tofloat(L, -1);
 				} else if (key == "gravity") {
 					params.gravity = lua_tofloat(L, -1);
@@ -385,6 +392,16 @@ static bool ParseProjectileParams(lua_State* L, ProjectileParams& params, const 
 					params.startAlpha = lua_tofloat(L, -1);
 				} else if (key == "endAlpha") {
 					params.endAlpha = lua_tofloat(L, -1);
+				}
+
+				continue;
+			}
+
+			if (lua_isstring(L, -1)) {
+				if (key == "model") {
+					params.model = modelParser->Load3DModel(lua_tostring(L, -1));
+				} else if (key == "cegtag") {
+					params.cegID = gCEG->Load(explGenHandler, lua_tostring(L, -1));
 				}
 
 				continue;
@@ -958,7 +975,7 @@ int LuaSyncedCtrl::CreateUnit(lua_State* L)
 		luaL_error(L, "[%s()]: not a controllable team (%d)", __FUNCTION__, teamID);
 		return 0;
 	}
-	if (!uh->CanBuildUnit(unitDef, teamID)) {
+	if (!unitHandler->CanBuildUnit(unitDef, teamID)) {
 		return 0; // unit limit reached
 	}
 
@@ -968,7 +985,7 @@ int LuaSyncedCtrl::CreateUnit(lua_State* L)
 	inCreateUnit = true;
 	UnitLoadParams params;
 	params.unitDef = unitDef; /// must be non-NULL
-	params.builder = uh->GetUnit(luaL_optint(L, 10, -1)); /// may be NULL
+	params.builder = unitHandler->GetUnit(luaL_optint(L, 10, -1)); /// may be NULL
 	params.pos     = pos;
 	params.speed   = ZeroVector;
 	params.unitID  = luaL_optint(L, 9, -1);
@@ -1847,13 +1864,13 @@ int LuaSyncedCtrl::SetUnitMidAndAimPos(lua_State* L)
 
 	if (updateQuads) {
 		// safety, possibly just need MovedUnit
-		qf->RemoveUnit(unit);
+		quadField->RemoveUnit(unit);
 	}
 
 	unit->SetMidAndAimPos(newMidPos, newAimPos, setRelative);
 
 	if (updateQuads) {
-		qf->MovedUnit(unit);
+		quadField->MovedUnit(unit);
 	}
 
 	lua_pushboolean(L, true);
@@ -1875,13 +1892,13 @@ int LuaSyncedCtrl::SetUnitRadiusAndHeight(lua_State* L)
 
 	if (updateQuads) {
 		// safety, possibly just need MovedUnit
-		qf->RemoveUnit(unit);
+		quadField->RemoveUnit(unit);
 	}
 
 	unit->SetRadiusAndHeight(newRadius, newHeight);
 
 	if (updateQuads) {
-		qf->MovedUnit(unit);
+		quadField->MovedUnit(unit);
 	}
 
 	lua_pushboolean(L, true);
@@ -2189,10 +2206,10 @@ int LuaSyncedCtrl::AddUnitDamage(lua_State* L)
 
 	CUnit* attacker = NULL;
 	if (attackerID >= 0) {
-		if (static_cast<size_t>(attackerID) >= uh->MaxUnits()) {
+		if (static_cast<size_t>(attackerID) >= unitHandler->MaxUnits()) {
 			return 0;
 		}
-		attacker = uh->units[attackerID];
+		attacker = unitHandler->units[attackerID];
 	}
 
 	if (weaponDefID >= weaponDefHandler->weaponDefs.size()) {
@@ -2594,13 +2611,13 @@ int LuaSyncedCtrl::SetFeatureMidAndAimPos(lua_State* L)
 	#undef FLOAT
 
 	if (updateQuads) {
-		qf->RemoveFeature(feature);
+		quadField->RemoveFeature(feature);
 	}
 
 	feature->SetMidAndAimPos(newMidPos, newAimPos, setRelative);
 
 	if (updateQuads) {
-		qf->AddFeature(feature);
+		quadField->AddFeature(feature);
 	}
 
 	lua_pushboolean(L, true);
@@ -2621,13 +2638,13 @@ int LuaSyncedCtrl::SetFeatureRadiusAndHeight(lua_State* L)
 	const bool updateQuads = (newRadius != feature->radius);
 
 	if (updateQuads) {
-		qf->RemoveFeature(feature);
+		quadField->RemoveFeature(feature);
 	}
 
 	feature->SetRadiusAndHeight(newRadius, newHeight);
 
 	if (updateQuads) {
-		qf->AddFeature(feature);
+		quadField->AddFeature(feature);
 	}
 
 	lua_pushboolean(L, true);
@@ -2844,13 +2861,13 @@ int LuaSyncedCtrl::SetProjectileCEG(lua_State* L)
 	if (proj->weapon) {
 		CWeaponProjectile* wproj = static_cast<CWeaponProjectile*>(proj);
 		if (wproj != NULL) {
-			wproj->cegID = gCEG->Load(explGenHandler, luaL_checkstring(L, 2));
+			wproj->SetCustomExplosionGeneratorID(gCEG->Load(explGenHandler, luaL_checkstring(L, 2)));
 		}
 	}
 	if (proj->piece) {
 		CPieceProjectile* pproj = static_cast<CPieceProjectile*>(proj);
 		if (pproj != NULL) {
-			pproj->cegID = gCEG->Load(explGenHandler, luaL_checkstring(L, 2));
+			pproj->SetCustomExplosionGeneratorID(gCEG->Load(explGenHandler, luaL_checkstring(L, 2)));
 		}
 	}
 
@@ -3605,6 +3622,31 @@ int LuaSyncedCtrl::SetTerrainTypeData(lua_State* L)
 
 /******************************************************************************/
 /******************************************************************************/
+
+int LuaSyncedCtrl::UnitWeaponFire(lua_State* L)
+{
+	CUnit* unit = ParseUnit(L, __FUNCTION__, 1);
+
+	if (unit == NULL)
+		return 0;
+	if (static_cast<uint32_t>(luaL_checkint(L, 2)) >= unit->weapons.size())
+		return 0;
+
+	unit->weapons[luaL_checkint(L, 2)]->Fire();
+	return 0;
+}
+int LuaSyncedCtrl::UnitWeaponHoldFire(lua_State* L)
+{
+	CUnit* unit = ParseUnit(L, __FUNCTION__, 1);
+
+	if (unit == NULL)
+		return 0;
+	if (static_cast<uint32_t>(luaL_checkint(L, 2)) >= unit->weapons.size())
+		return 0;
+
+	unit->weapons[luaL_checkint(L, 2)]->HoldFire();
+	return 0;
+}
 
 int LuaSyncedCtrl::SpawnProjectile(lua_State* L)
 {

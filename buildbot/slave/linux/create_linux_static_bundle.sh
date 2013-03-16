@@ -2,7 +2,7 @@
 set -e
 . buildbot/slave/prepare.sh
 
-FILEPREFIX="linux-static"
+FILEPREFIX="${OUTPUTDIR}-static"
 
 DEST=${TMP_BASE}/inst
 INSTALLDIR=${DEST}
@@ -15,7 +15,7 @@ SEVENZIP_NONSOLID="nice -19 ionice -c3 7z a -t7z -m0=lzma -mx=9 -mfb=64 -md=32m 
 ZIP="zip -r9"
 
 cd ${BUILDDIR}
-make install DESTDIR=${DEST}
+DESTDIR=${DEST} ninja install
 cd ${INSTALLDIR}
 
 

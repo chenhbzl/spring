@@ -1007,7 +1007,7 @@ bool CHoverAirMoveType::HandleCollisions()
 		bool hitBuilding = false;
 
 		if (!loadingUnits && checkCollisions) {
-			const std::vector<CUnit*>& nearUnits = qf->StableGetUnitsExact(pos, owner->radius + 6);
+			const std::vector<CUnit*>& nearUnits = quadField->StableGetUnitsExact(pos, owner->radius + 6);
 
 			for (std::vector<CUnit*>::const_iterator ui = nearUnits.begin(); ui != nearUnits.end(); ++ui) {
 				CUnit* unit = *ui;

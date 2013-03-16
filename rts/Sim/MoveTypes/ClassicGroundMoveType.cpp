@@ -339,7 +339,7 @@ void CClassicGroundMoveType::SlowUpdate()
 			radarhandler->MoveUnit(owner);
 		}
 
-		qf->MovedUnit(owner);
+		quadField->MovedUnit(owner);
 	}
 }
 
@@ -645,8 +645,8 @@ void CClassicGroundMoveType::CheckCollisionSkid()
 {
 	const SyncedFloat3& midPos = owner->midPos;
 
-	const std::vector<CUnit*>& nearUnits = qf->StableGetUnitsExact(midPos, owner->radius);
-	const std::vector<CFeature*>& nearFeatures = qf->StableGetFeaturesExact(midPos, owner->radius);
+	const std::vector<CUnit*>& nearUnits = quadField->StableGetUnitsExact(midPos, owner->radius);
+	const std::vector<CFeature*>& nearFeatures = quadField->StableGetFeaturesExact(midPos, owner->radius);
 
 	for (std::vector<CUnit*>::const_iterator ui = nearUnits.begin(); ui != nearUnits.end(); ++ui) {
 		CUnit* u = *ui;
@@ -813,7 +813,7 @@ float3 CClassicGroundMoveType::ObstacleAvoidance(float3 desiredDir) {
 
 			MoveDef* moveDef = owner->moveDef;
 
-			std::vector<CSolidObject*> nearbyObjects = qf->StableGetSolidsExact(owner->pos, speedf * 35 + 30 + owner->xsize / 2);
+			std::vector<CSolidObject*> nearbyObjects = quadField->StableGetSolidsExact(owner->pos, speedf * 35 + 30 + owner->xsize / 2);
 			vector<CSolidObject*> objectsOnPath;
 
 			for (std::vector<CSolidObject*>::const_iterator oi = nearbyObjects.begin(); oi != nearbyObjects.end(); ++oi) {

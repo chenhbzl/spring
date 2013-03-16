@@ -38,7 +38,6 @@ CR_REG_METADATA(CStrafeAirMoveType, (
 
 	CR_MEMBER(maxBank),
 	CR_MEMBER(maxPitch),
-	CR_MEMBER(maxSpeed),
 	CR_MEMBER(turnRadius),
 
 	CR_MEMBER(maxAcc),
@@ -86,7 +85,6 @@ CStrafeAirMoveType::CStrafeAirMoveType(CUnit* owner):
 	myGravity(0.8f),
 	maxBank(0.55f),
 	maxPitch(0.35f),
-	maxSpeed(0.0f),
 	turnRadius(150),
 	maxAcc(0.006f),
 	maxAileron(0.04f),
@@ -298,7 +296,7 @@ bool CStrafeAirMoveType::HandleCollisions() {
 		bool hitBuilding = false;
 
 		if (checkCollisions) {
-			const std::vector<CUnit*>& nearUnits = qf->StableGetUnitsExact(pos, owner->radius + 6);
+			const std::vector<CUnit*>& nearUnits = quadField->StableGetUnitsExact(pos, owner->radius + 6);
 
 			for (std::vector<CUnit*>::const_iterator ui = nearUnits.begin(); ui != nearUnits.end(); ++ui) {
 				CUnit* unit = *ui;
@@ -1081,7 +1079,7 @@ void CStrafeAirMoveType::SetState(AAirMoveType::AircraftState newState)
 		case AIRCRAFT_LANDED:
 			owner->useAirLos = false;
 			owner->physicalState = CSolidObject::OnGround;
-			
+
 			//FIXME already inform commandAI in AIRCRAFT_LANDING!
 			//FIXME Problem is StopMove() also calls owner->script->StopMoving() what should only be called when landed. Also see CHoverAirMoveType::SetState().
 			owner->QueCAIStopMove();

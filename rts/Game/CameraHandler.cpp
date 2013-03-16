@@ -156,6 +156,7 @@ void CCameraHandler::UpdateCam()
 
 void CCameraHandler::CameraTransition(float time)
 {
+	UpdateCam(); // this prevents camera stutter when multithreading
 	time = std::max(time, 0.0f) * cameraTimeFactor;
 
 	cameraTimeStart = spring_tomsecs(spring_gettime()) / 1000.0f;
@@ -246,6 +247,7 @@ void CCameraHandler::ToggleState()
 
 void CCameraHandler::ToggleOverviewCamera()
 {
+	CameraTransition(1.0f);
 	if (controllerStack.empty()) {
 		PushMode();
 		SetCameraMode(CAMERA_MODE_OVERVIEW);
@@ -253,7 +255,6 @@ void CCameraHandler::ToggleOverviewCamera()
 	else {
 		PopMode();
 	}
-	CameraTransition(1.0f);
 }
 
 

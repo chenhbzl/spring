@@ -17,6 +17,9 @@
 CR_BIND_DERIVED_INTERFACE(AAirMoveType, AMoveType);
 
 CR_REG_METADATA(AAirMoveType, (
+	CR_ENUM_MEMBER(aircraftState),
+	CR_ENUM_MEMBER(padStatus),
+
 	CR_MEMBER(oldGoalPos),
 	CR_MEMBER(reservedLandingPos),
 
@@ -32,9 +35,7 @@ CR_REG_METADATA(AAirMoveType, (
 	CR_MEMBER(reservedPad),
 
 	CR_MEMBER(lastColWarningType),
-	CR_MEMBER(lastFuelUpdateFrame),
-
-	CR_RESERVED(16)
+	CR_MEMBER(lastFuelUpdateFrame)
 ));
 
 AAirMoveType::AAirMoveType(CUnit* unit):
@@ -212,7 +213,7 @@ void AAirMoveType::CheckForCollision()
 	const SyncedFloat3& forward = owner->frontdir;
 
 	const float3 midTestPos = pos + forward * 121.0f;
-	const std::vector<CUnit*>& others = qf->StableGetUnitsExact(midTestPos, 115.0f);
+	const std::vector<CUnit*>& others = quadField->StableGetUnitsExact(midTestPos, 115.0f);
 
 	float dist = 200.0f;
 

@@ -260,9 +260,9 @@ static inline CProjectile* ParseRawProjectile(lua_State* L, const char* caller, 
 
 	const ProjectileMapValPair* pp = NULL;
 	if (synced) {
-		pp = ph->GetMapPairBySyncedID(projID);
+		pp = projectileHandler->GetMapPairBySyncedID(projID);
 	} else {
-		pp = ph->GetMapPairByUnsyncedID(projID);
+		pp = projectileHandler->GetMapPairByUnsyncedID(projID);
 	}
 
 	return (pp) ? pp->first : NULL;
@@ -278,11 +278,11 @@ static inline CUnit* ParseRawUnit(lua_State* L, const char* caller, int index)
 	}
 
 	const int unitID = lua_toint(L, index);
-	if ((unitID < 0) || (static_cast<size_t>(unitID) >= uh->MaxUnits())) {
+	if ((unitID < 0) || (static_cast<size_t>(unitID) >= unitHandler->MaxUnits())) {
 		luaL_error(L, "%s(): Bad unitID: %i\n", caller, unitID);
 	}
 
-	return uh->units[unitID];
+	return unitHandler->units[unitID];
 }
 
 
@@ -360,7 +360,7 @@ void LuaUnsyncedCtrl::DrawUnitCommandQueues()
 	std::set<int>::const_iterator ui;
 
 	for (ui = drawCmdQueueUnits.begin(); ui != drawCmdQueueUnits.end(); ++ui) {
-		const CUnit* unit = uh->GetUnit(*ui);
+		const CUnit* unit = unitHandler->GetUnit(*ui);
 
 		if (unit == NULL || unit->commandAI == NULL) {
 			continue;
@@ -854,8 +854,8 @@ int LuaUnsyncedCtrl::SetCameraTarget(lua_State* L)
 		transTime = lua_tofloat(L, 4);
 	}
 
-	camHandler->GetCurrentController().SetPos(pos);
 	camHandler->CameraTransition(transTime);
+	camHandler->GetCurrentController().SetPos(pos);
 
 	return 0;
 }
@@ -888,8 +888,8 @@ int LuaUnsyncedCtrl::SetCameraState(lua_State* L)
 		}
 	}
 
-	lua_pushboolean(L, camHandler->SetState(camState));
 	camHandler->CameraTransition(camTime);
+	lua_pushboolean(L, camHandler->SetState(camState));
 
 	if (!CLuaHandle::GetHandleSynced(L)) {
 		return 1;
@@ -1252,9 +1252,8 @@ static bool ParseLight(lua_State* L, GL::Light& light, const int tblIdx, const c
 
 			if (lua_istable(L, -1)) {
 				float array[3] = {0.0f, 0.0f, 0.0f};
-				const int size = LuaUtils::ParseFloatArray(L, -1, array, 3);
 
-				if (size == 3) {
+				if (LuaUtils::ParseFloatArray(L, -1, array, 3) == 3) {
 					if (key == "position") {
 						light.SetPosition(array);
 					} else if (key == "direction") {

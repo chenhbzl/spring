@@ -56,15 +56,22 @@ bool CLuaHandle::useDualStates = false;
 /******************************************************************************/
 /******************************************************************************/
 
+static void PushTracebackFuncToRegistry(lua_State* L)
+{
+	LUA_OPEN_LIB(L, luaopen_debug);
+		HSTR_PUSH(L, "traceback");
+		LuaUtils::PushDebugTraceback(L);
+		lua_rawset(L, LUA_REGISTRYINDEX);
+	// We only need the debug.traceback function, the others are unsafe for syncing.
+	// Later CLuaHandle implementations decide themselves if they want to reload the lib or not (LuaUI does).
+	LUA_UNLOAD_LIB(L, LUA_DBLIBNAME);
+}
+
+
 CLuaHandle::CLuaHandle(const string& _name, int _order, bool _userMode)
 	: CEventClient(_name, _order, false) // FIXME
 	, userMode   (_userMode)
 	, killMe     (false)
-#ifdef DEBUG
-	, printTracebacks(true)
-#else
-	, printTracebacks(false)
-#endif
 	, callinErrors(0)
 {
 	UpdateThreading();
@@ -72,10 +79,12 @@ CLuaHandle::CLuaHandle(const string& _name, int _order, bool _userMode)
 	SetSynced(false, true);
 	D_Sim.owner = this;
 	L_Sim = LUA_OPEN(&D_Sim, GetUserMode(), true);
-	LUA_OPEN_LIB(L_Sim, luaopen_debug);
 	D_Draw.owner = this;
 	L_Draw = LUA_OPEN(&D_Draw, GetUserMode(), false);
-	LUA_OPEN_LIB(L_Draw, luaopen_debug);
+
+	// needed for engine traceback
+	PushTracebackFuncToRegistry(L_Sim);
+	PushTracebackFuncToRegistry(L_Draw);
 }
 
 
@@ -400,9 +409,6 @@ bool CLuaHandle::ExecuteCallsFromSynced(bool forced) {
 
 int CLuaHandle::SetupTraceback(lua_State *L)
 {
-	if (!printTracebacks)
-		return 0;
-
 	return LuaUtils::PushDebugTraceback(L);
 }
 
@@ -1385,7 +1391,7 @@ void CLuaHandle::ProjectileCreated(const CProjectile* p)
 
 	const CUnit* owner = p->owner();
 	const CWeaponProjectile* wp = p->weapon? static_cast<const CWeaponProjectile*>(p): NULL;
-	const WeaponDef* wd = p->weapon? wp->weaponDef: NULL;
+	const WeaponDef* wd = p->weapon? wp->GetWeaponDef(): NULL;
 
 	// if this weapon-type is not being watched, bail
 	if (p->weapon && (wd == NULL || !watchWeaponDefs[wd->id]))
@@ -1418,7 +1424,7 @@ void CLuaHandle::ProjectileDestroyed(const CProjectile* p)
 	if (!p->weapon && !p->piece) return;
 	if (p->weapon) {
 		const CWeaponProjectile* wp = static_cast<const CWeaponProjectile*>(p);
-		const WeaponDef* wd = wp->weaponDef;
+		const WeaponDef* wd = wp->GetWeaponDef();
 
 		// if this weapon-type is not being watched, bail
 		if (wd == NULL || !watchWeaponDefs[wd->id]) return;

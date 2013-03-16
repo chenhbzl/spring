@@ -26,8 +26,7 @@ CR_REG_METADATA(AMoveType, (
 	CR_MEMBER(repairBelowHealth),
 
 	CR_MEMBER(useHeading),
-	CR_ENUM_MEMBER(progressState),
-	CR_RESERVED(32)
+	CR_ENUM_MEMBER(progressState)
 ));
 
 AMoveType::AMoveType(CUnit* owner):
@@ -48,9 +47,10 @@ AMoveType::AMoveType(CUnit* owner):
 	stableProgressState(Done),
 #endif
 
-	maxSpeed(owner->unitDef->speed / GAME_SPEED),
-	maxSpeedDef(owner->unitDef->speed / GAME_SPEED),
-	maxWantedSpeed(owner->unitDef->speed / GAME_SPEED),
+	maxSpeed(owner? owner->unitDef->speed / GAME_SPEED : 0.0f),
+	maxSpeedDef(owner? owner->unitDef->speed / GAME_SPEED : 0.0f),
+	maxWantedSpeed(owner? owner->unitDef->speed / GAME_SPEED : 0.0f),
+
 	repairBelowHealth(0.3f)
 {
 	StableInit(modInfo.asyncPathFinder);

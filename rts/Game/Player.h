@@ -21,9 +21,9 @@ class CUnit;
 class CPlayer : public PlayerBase
 {
 public:
-	CR_DECLARE_STRUCT(CPlayer);
+	CR_DECLARE(CPlayer);
+
 	CPlayer();
-	~CPlayer() {}
 
 	bool CanControlTeam(int teamID) const {
 		return (controlledTeams.find(teamID) != controlledTeams.end());
@@ -41,6 +41,7 @@ public:
 	void StartControllingUnit();
 	void StopControllingUnit();
 
+public:
 	bool active;
 
 	int playerNum;

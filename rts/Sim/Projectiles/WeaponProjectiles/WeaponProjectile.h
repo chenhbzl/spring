@@ -7,6 +7,7 @@
 #include "WeaponProjectileTypes.h"
 
 struct WeaponDef;
+struct S3DModel;
 class CPlasmaRepulser;
 class CWeaponProjectile;
 
@@ -14,7 +15,12 @@ struct ProjectileParams {
 	ProjectileParams()
 		: target(NULL)
 		, owner(NULL)
+		, model(NULL)
 		, weaponDef(NULL)
+
+		, ownerID(-1u)
+		, teamID(-1u)
+		, cegID(-1u)
 
 		, ttl(0)
 		, gravity(0.0f)
@@ -35,8 +41,13 @@ struct ProjectileParams {
 	// unit, feature or weapon projectile to intercept
 	CWorldObject* target;
 	CUnit* owner;
+	S3DModel* model;
 
 	const WeaponDef* weaponDef;
+
+	unsigned int ownerID;
+	unsigned int teamID;
+	unsigned int cegID;
 
 	int ttl;
 	float gravity;
@@ -59,8 +70,9 @@ class CWeaponProjectile : public CProjectile
 public:
 	CWeaponProjectile();
 	CWeaponProjectile(const ProjectileParams& params, const bool isRay = false);
-	virtual ~CWeaponProjectile();
+	virtual ~CWeaponProjectile() {}
 
+	virtual void Explode(CUnit* hitUnit, CFeature* hitFeature, float3 impactPos, float3 impactDir);
 	virtual void Collision();
 	virtual void Collision(CFeature* feature);
 	virtual void Collision(CUnit* unit);
@@ -84,36 +96,40 @@ public:
 	const CWorldObject* GetTargetObject() const { return target; }
 	      CWorldObject* GetTargetObject()       { return target; }
 
+	const WeaponDef* GetWeaponDef() const { return weaponDef; }
+
 	void SetStartPos(const float3& newStartPos) { startpos = newStartPos; }
 	void SetTargetPos(const float3& newTargetPos) { targetPos = newTargetPos; }
 
 	const float3& GetStartPos() const { return startpos; }
 	const float3& GetTargetPos() const { return targetPos; }
 
+	void SetBeingIntercepted(bool b) { targeted = b; }
+	bool IsBeingIntercepted() const { return targeted; }
+
 protected:
 	void UpdateInterception();
 	virtual void UpdateGroundBounce();
-	bool TraveledRange();
 
-public:
-	/// true if we are a nuke and an anti is on the way
-	bool targeted;
-	const WeaponDef* weaponDef;
-
-	unsigned int weaponDefID;
-	unsigned int cegID;
-
-	int colorTeam;
+	bool TraveledRange() const;
+	bool IsHitScan() const;
 
 protected:
+	const WeaponDef* weaponDef;
+
 	CWorldObject* target;
 
-	float3 startpos;
-	float3 targetPos;
+	unsigned int weaponDefID;
 
 	int ttl;
 	int bounces;
-	bool keepBouncing;
+
+	/// true if we are an interceptable projectile
+	// and an interceptor projectile is on the way
+	bool targeted;
+
+	float3 startpos;
+	float3 targetPos;
 };
 
 #endif /* WEAPON_PROJECTILE_H */

@@ -43,7 +43,8 @@ public:
 	virtual void DrawCallback() {}
 
 	CUnit* owner() const;
-	int GetOwnerID() const { return ownerId; }
+	unsigned int GetOwnerID() const { return ownerID; }
+	unsigned int GetTeamID() const { return teamID; }
 
 	void SetQuadFieldCellCoors(const int2& cell) { quadFieldCellCoors = cell; }
 	int2 GetQuadFieldCellCoors() const { return quadFieldCellCoors; }
@@ -57,6 +58,8 @@ public:
 	void QueCollision(CUnit* u, LocalModelPiece* lmp, bool inhit, const float3& cpos, const float3& cpos0, bool delay = Threading::multiThreadedSim);
 	void QueCollision(CFeature* f, bool inhit, const float3& cpos, const float3& cpos0, bool delay = Threading::multiThreadedSim);
 	void QueCollision(const float cpos, bool delay = Threading::multiThreadedSim);
+
+	void SetCustomExplosionGeneratorID(unsigned int id) { cegID = id; }
 
 	static bool inArray;
 	static CVertexArray* va;
@@ -102,7 +105,10 @@ public:
 	std::deque<DelayOp> delayOps;
 
 protected:
-	int ownerId;
+	unsigned int ownerID;
+	unsigned int teamID;
+	unsigned int cegID;
+
 	unsigned int projectileType;
 	unsigned int collisionFlags;
 
