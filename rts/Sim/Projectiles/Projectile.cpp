@@ -6,8 +6,10 @@
 #include "Rendering/Colors.h"
 #include "Rendering/GL/VertexArray.h"
 #include "Sim/Projectiles/ProjectileHandler.h"
+#include "Sim/Misc/GlobalSynced.h"
 #include "Sim/Misc/QuadField.h"
 #include "Sim/Units/Unit.h"
+#include "System/Log/ILog.h"
 #include "Sim/Units/UnitHandler.h"
 
 CR_BIND_DERIVED(CProjectile, CExpGenSpawnable, );
@@ -75,6 +77,7 @@ CProjectile::CProjectile()
 	, projectileType(-1u)
 	, collisionFlags(0)
 {
+	ASSERT_SINGLETHREADED_SIM();
 	GML::GetTicks(lastProjUpdate);
 }
 
@@ -101,6 +104,7 @@ CProjectile::CProjectile(const float3& pos, const float3& spd, CUnit* owner, boo
 	, projectileType(-1u)
 	, collisionFlags(0)
 {
+	ASSERT_SINGLETHREADED_SIM();
 	Init(ZeroVector, owner);
 	GML::GetTicks(lastProjUpdate);
 }
@@ -188,6 +192,68 @@ int CProjectile::DrawArray()
 	inArray = false;
 
 	return idx;
+}
+
+void CProjectile::QueCollision(CUnit* u, LocalModelPiece* lmp, bool inhit, const float3& cpos, const float3& cpos0, bool delay) {
+	if (delay) {
+//		ASSERT_THREAD_OWNS_PROJECTILE();
+		delayOps.push_back(DelayOp(UNIT_COLLISION, u, lmp, inhit, cpos, cpos0));
+	} else {
+		if (lmp != NULL)
+			u->SetLastAttackedPiece(lmp, gs->frameNum);
+		if (!inhit) {
+			pos = cpos;
+			Collision(u);
+			pos = cpos0;
+		} else {
+			Collision(u);
+		}
+	}
+}
+
+void CProjectile::QueCollision(CFeature* f, bool inhit, const float3& cpos, const float3& cpos0, bool delay) {
+	if (delay) {
+//		ASSERT_THREAD_OWNS_PROJECTILE();
+		delayOps.push_back(DelayOp(FEAT_COLLISION, f, inhit, cpos, cpos0));
+	} else {
+		if (!inhit) {
+			pos = cpos;
+			Collision(f);
+			pos = cpos0;
+		} else {
+			Collision(f);
+		}
+	}
+}
+
+void CProjectile::QueCollision(const float cpos, bool delay) {
+	if (delay) {
+//		ASSERT_THREAD_OWNS_PROJECTILE();
+		delayOps.push_back(DelayOp(GROUND_COLLISION, cpos));
+	} else {
+		pos.y = cpos;
+		Collision();
+	}
+}
+
+void CProjectile::ExecuteDelayOps() {
+	while (!delayOps.empty()) {
+		const DelayOp d = delayOps.front(); // NOTE: No reference here since any of the calls below may add new delay ops at the end of the deque
+		switch (d.type) {
+			case UNIT_COLLISION:
+				QueCollision(d.unit, d.lmp, d.inside, d.pos, d.pos0, false);
+				break;
+			case FEAT_COLLISION:
+				QueCollision(d.feat, d.inside, d.pos, d.pos0, false);
+				break;
+			case GROUND_COLLISION:
+				QueCollision(d.pos.y, false);
+				break;
+			default:
+				LOG_L(L_ERROR, "Unknown delay operation: %d", d.type);
+		}
+		delayOps.pop_front();
+	}
 }
 
 CUnit* CProjectile::owner() const {

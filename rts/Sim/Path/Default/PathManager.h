@@ -26,13 +26,15 @@ public:
 	unsigned int GetPathFinderType() const { return PFS_TYPE_DEFAULT; }
 	boost::uint32_t GetPathCheckSum() const;
 
-	void Update();
-	void UpdateFull();
-	void UpdatePath(const CSolidObject*, unsigned int);
-	void DeletePath(unsigned int pathID);
+	void Update(ST_FUNC int unused = 0);
+	void UpdateFull(ST_FUNC int unused = 0);
+	void UpdatePath(ST_FUNC const CSolidObject*, unsigned int);
+	void DeletePath(ST_FUNC unsigned int pathID);
+	void MergePathCaches();
 
 
 	float3 NextWayPoint(
+		ST_FUNC
 		const CSolidObject* owner,
 		unsigned int pathID,
 		unsigned int numRetries,
@@ -42,6 +44,7 @@ public:
 	);
 
 	unsigned int RequestPath(
+		ST_FUNC
 		CSolidObject* caller,
 		const MoveDef* moveDef,
 		const float3& startPos,
@@ -69,14 +72,14 @@ public:
 	 */
 	void GetDetailedPathSquares(unsigned pathID, std::vector<int2>& points) const;
 
-	void GetPathWayPoints(unsigned int pathID, std::vector<float3>& points, std::vector<int>& starts) const;
+	void GetPathWayPoints(ST_FUNC unsigned int pathID, std::vector<float3>& points, std::vector<int>& starts) const;
 
-	void TerrainChange(unsigned int x1, unsigned int z1, unsigned int x2, unsigned int z2, unsigned int type);
+	void TerrainChange(ST_FUNC unsigned int x1, unsigned int z1, unsigned int x2, unsigned int z2, unsigned int type);
 
-	bool SetNodeExtraCost(unsigned int, unsigned int, float, bool);
-	bool SetNodeExtraCosts(const float*, unsigned int, unsigned int, bool);
-	float GetNodeExtraCost(unsigned int, unsigned int, bool) const;
-	const float* GetNodeExtraCosts(bool) const;
+	bool SetNodeExtraCost(ST_FUNC unsigned int, unsigned int, float, bool);
+	bool SetNodeExtraCosts(ST_FUNC const float*, unsigned int, unsigned int, bool);
+	float GetNodeExtraCost(ST_FUNC unsigned int, unsigned int, bool) const;
+	const float* GetNodeExtraCosts(ST_FUNC bool) const;
 
 	int2 GetNumQueuedUpdates() const;
 

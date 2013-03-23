@@ -41,6 +41,7 @@ public:
 		float maxTurnRate
 	) const = 0;
 
+	// Note: If implementing these, they must be MT safe (not change the state of the path controller)
 	virtual bool AllowSetTempGoalPosition(unsigned int pathID, const float3& pos) const = 0;
 	virtual void SetTempGoalPosition(unsigned int pathID, const float3& pos) = 0;
 	virtual void SetRealGoalPosition(unsigned int pathID, const float3& pos) = 0;
@@ -80,16 +81,16 @@ public:
 	) const;
 
 	bool AllowSetTempGoalPosition(unsigned int pathID, const float3& pos) const { return true; }
-	void SetTempGoalPosition(unsigned int pathID, const float3& pos) { realGoalPos = pos; }
-	void SetRealGoalPosition(unsigned int pathID, const float3& pos) { tempGoalPos = pos; }
+	void SetTempGoalPosition(unsigned int pathID, const float3& pos) { /*realGoalPos = pos;*/ } // Changes the state of the path controller -> not MT safe
+	void SetRealGoalPosition(unsigned int pathID, const float3& pos) { /*tempGoalPos = pos;*/ } // Changes the state of the path controller -> not MT safe
 
 	bool IgnoreTerrain(const MoveDef& md, const float3& pos) const { return false; }
 	bool IgnoreCollision(const CUnit* collider, const CUnit* collidee) const { return false; }
 	bool IgnoreCollision(const CUnit* collider, const CFeature* collidee) const { return false; }
 
 private:
-	float3 realGoalPos; // where <owner> ultimately wants to go (its final waypoint)
-	float3 tempGoalPos; // where <owner> currently wants to go (its next waypoint)
+//	float3 realGoalPos; // where <owner> ultimately wants to go (its final waypoint)
+//	float3 tempGoalPos; // where <owner> currently wants to go (its next waypoint)
 };
 
 #endif

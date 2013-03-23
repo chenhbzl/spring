@@ -24,6 +24,8 @@ namespace QTPFS {
 			numCacheMisses.resize(PATH_TYPE_DEAD + 1, 0);
 		}
 
+		void Merge();
+
 		typedef std::map<unsigned int, IPath*> PathMap;
 		typedef std::map<unsigned int, IPath*>::iterator PathMapIt;
 
@@ -51,8 +53,12 @@ namespace QTPFS {
 		      IPath* GetPath(unsigned int pathID, unsigned int pathType);
 
 		PathMap tempPaths;
+		std::map<int, std::list<IPath *> > newTempPaths;
 		PathMap livePaths;
+		std::map<int, std::list<IPath *> > newLivePaths;
 		PathMap deadPaths;
+		std::map<int, std::list<IPath *> > newDelPaths;
+		PathMap allPaths;
 
 		std::vector<unsigned int> numCacheHits;
 		std::vector<unsigned int> numCacheMisses;

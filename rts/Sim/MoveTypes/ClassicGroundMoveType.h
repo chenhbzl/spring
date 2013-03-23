@@ -34,6 +34,10 @@ public:
 	bool IsSkidding() const { return skidding; }
 	bool IsFlying() const { return flying; }
 
+	void ChangeTargetHeading(short heading);
+
+	bool skidding;
+
 private:
 	float BreakingDistance(float speed);
 	float3 Here();
@@ -85,7 +89,6 @@ private:
 	bool atGoal;
 	bool haveFinalWaypoint;
 
-	bool skidding;
 	bool flying;
 
 	float turnRate;

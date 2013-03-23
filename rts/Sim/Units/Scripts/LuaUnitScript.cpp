@@ -167,9 +167,9 @@ CUnitScript* CLuaUnitScript::activeScript;
 /******************************************************************************/
 
 
-CLuaUnitScript::CLuaUnitScript(lua_State* L, CUnit* unit)
+CLuaUnitScript::CLuaUnitScript(lua_State* LS, CUnit* unit)
 	: CUnitScript(unit, unit->localModel->pieces)
-	, handle(CLuaHandle::GetHandle(L)), L(L)
+	, handle(CLuaHandle::GetHandle(LS)), L(LS)
 	, scriptIndex(LUAFN_Last, LUA_NOREF)
 	, inKilled(false)
 {
@@ -189,6 +189,9 @@ CLuaUnitScript::~CLuaUnitScript()
 	if (L != NULL) {
 		// notify Lua the script is going down
 		Destroy();
+
+		GML_DRCMUTEX_LOCK(lua); // this Lua state may be in use by other thread
+
 		for (map<string, int>::iterator it = scriptNames.begin(); it != scriptNames.end(); ++it) {
 			luaL_unref(L, LUA_REGISTRYINDEX, it->second);
 		}

@@ -8,6 +8,7 @@
 #include "System/float3.h"
 #include "System/creg/creg_cond.h"
 #include "GlobalConstants.h"
+#include "Sim/Objects/SolidObject.h"
 
 
 class CGameSetup;
@@ -32,9 +33,15 @@ public:
 	int    randInt();    //!< synced random int
 	float  randFloat();  //!< synced random float
 	float3 randVector(); //!< synced random vector
+	int    randInt(const CSolidObject *o); //!< synced random int/float/vector,
+	float  randFloat(const CSolidObject *o); //!< thread safe if no other thread calls
+	float3 randVector(const CSolidObject *o); //!< randInt/randFloat/randVector using object with same id
 
 	void SetRandSeed(unsigned int seed, bool init = false) {
 		randSeed = seed;
+		for (int i = 0; i < MAX_UNITS; ++i)
+			randSeeds[i] = (randInt() << 16) | randInt();
+		randSeed = seed; // again
 		if (init) { initRandSeed = randSeed; }
 	}
 	unsigned int GetRandSeed()     const { return randSeed; }
@@ -190,6 +197,7 @@ private:
 	* Holds the synced random seed
 	*/
 	int randSeed;
+	int randSeeds[MAX_UNITS];
 
 	/**
 	* @brief initial random seed

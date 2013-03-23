@@ -83,7 +83,10 @@
 #include "lib/luasocket/src/restrictions.h"
 
 CONFIG(unsigned, SetCoreAffinity).defaultValue(0).safemodeValue(1).description("Defines a bitmask indicating which CPU cores the main-thread should use.");
-CONFIG(unsigned, SetCoreAffinitySim).defaultValue(0).safemodeValue(1).description("Defines a bitmask indicating which CPU cores the sim-thread should use.");
+CONFIG(unsigned, SetCoreAffinitySim).defaultValue(0).safemodeValue(1).description("Defines a bitmask indicating which CPU cores the primary sim-thread should use.");
+CONFIG(unsigned, SetCoreAffinitySimMT).defaultValue(0).safemodeValue(1).description("Defines a bitmask indicating which CPU cores the secondary sim-thread(s) should use.");
+CONFIG(unsigned, SetCoreAffinityRenderMT).defaultValue(0).safemodeValue(1).description("Defines a bitmask indicating which CPU cores the secondary render-thread(s) should use.");
+CONFIG(unsigned, SetCoreAffinityPath).defaultValue(0).safemodeValue(1).description("Defines a bitmask indicating which CPU cores the asynchronous path-thread should use.");
 CONFIG(int, FSAALevel).defaultValue(0).minimumValue(0).maximumValue(8);
 CONFIG(int, SmoothLines).defaultValue(2).safemodeValue(0).minimumValue(0).maximumValue(3).description("Smooth lines.\n 0 := off\n 1 := fastest\n 2 := don't care\n 3 := nicest");
 CONFIG(int, SmoothPoints).defaultValue(2).safemodeValue(0).minimumValue(0).maximumValue(3).description("Smooth points.\n 0 := off\n 1 := fastest\n 2 := don't care\n 3 := nicest");
@@ -105,7 +108,13 @@ CONFIG(int, WindowPosY).defaultValue(32);
 CONFIG(int, WindowState).defaultValue(0);
 CONFIG(bool, WindowBorderless).defaultValue(false);
 CONFIG(int, PathingThreadCount).defaultValue(0).safemodeValue(1).minimumValue(0);
+#if defined(DEBUG) && defined(HEADLESS) // assume validation test
+CONFIG(int, SetCoreAffinityAuto).defaultValue(-1).safemodeValue(-1).description("Automatically configures the CPU affinity for all threads, -1: force disable, 1: force enable.");
+CONFIG(int, MultiThreadCount).defaultValue(4).safemodeValue(4).minimumValue(4).maximumValue(4);
+#else
+CONFIG(int, SetCoreAffinityAuto).defaultValue(0).safemodeValue(0).description("Automatically configures the CPU affinity for all threads, -1: force disable, 1: force enable.");
 CONFIG(int, MultiThreadCount).defaultValue(0).safemodeValue(1).minimumValue(0).maximumValue(GML_MAX_NUM_THREADS);
+#endif
 CONFIG(std::string, name).defaultValue(UnnamedPlayerName);
 
 
@@ -1097,7 +1106,7 @@ bool SpringApp::MainEventHandler(const SDL_Event& event)
 {
 	switch (event.type) {
 		case SDL_VIDEORESIZE: {
-			GML_MSTMUTEX_LOCK(sim); // MainEventHandler
+			GML_MSTMUTEX_LOCK(sim, -1); // MainEventHandler
 
 			Watchdog::ClearTimer(WDT_MAIN, true);
 			globalRendering->viewSizeX = event.resize.w;
@@ -1113,7 +1122,7 @@ bool SpringApp::MainEventHandler(const SDL_Event& event)
 			break;
 		}
 		case SDL_VIDEOEXPOSE: {
-			GML_MSTMUTEX_LOCK(sim); // MainEventHandler
+			GML_MSTMUTEX_LOCK(sim, -1); // MainEventHandler
 
 			Watchdog::ClearTimer(WDT_MAIN, true);
 			// re-initialize the stencil

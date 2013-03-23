@@ -45,6 +45,8 @@ public:
 	static void CreateLineTable();
 	static void DeleteLineTable();
 
+	void ChangeTargetHeading(short heading);
+
 private:
 	float3 GetObstacleAvoidanceDir(const float3& desiredDir);
 	float3 GetNewSpeedVector(const float hAcc, const float vAcc) const;

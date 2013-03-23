@@ -347,6 +347,7 @@ CGame::~CGame()
 #endif
 
 	ENTER_SYNCED_CODE();
+	IPathManager::ScopedDisableThreading sdt;
 
 	CEndGameBox::Destroy();
 	CLoadScreen::DeleteInstance(); // make sure to halt loading, otherwise crash :)
@@ -576,7 +577,7 @@ void CGame::PostLoadSimulation()
 	radarhandler = new CRadarHandler(false);
 
 	mapDamage = IMapDamage::GetMapDamage();
-	pathManager = IPathManager::GetInstance(modInfo.pathFinderSystem);
+	pathManager = IPathManager::GetInstance(modInfo.pathFinderSystem, modInfo.asyncPathFinder);
 
 	// load map-specific features after pathManager so it knows about them (via TerrainChange)
 	loadscreen->SetLoadMessage("Initializing Map Features");
@@ -1407,6 +1408,7 @@ void CGame::DrawInputText()
 
 void CGame::StartPlaying()
 {
+	DesyncDetector::StartPlaying();
 	assert(!playing);
 	playing = true;
 	GameSetupDrawer::Disable();
@@ -1514,10 +1516,11 @@ void CGame::SimFrame() {
 	SCOPED_TIMER("SimFrame");
 	helper->Update();
 	mapDamage->Update();
-	pathManager->Update();
+	if (!Threading::threadedPath)
+		pathManager->Update();
+	featureHandler->Update();
 	unitHandler->Update();
 	projectileHandler->Update();
-	featureHandler->Update();
 	GCobEngine.Tick(33);
 	GUnitScriptEngine.Tick(33);
 	wind.Update();

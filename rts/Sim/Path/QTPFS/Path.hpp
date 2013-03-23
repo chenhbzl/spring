@@ -5,9 +5,9 @@
 
 #include <vector>
 
+#include "Sim/Objects/SolidObject.h"
 #include "System/float3.h"
 
-class CSolidObject;
 
 namespace QTPFS {
 	struct IPath {
@@ -22,6 +22,7 @@ namespace QTPFS {
 			synced = true;
 
 			owner = NULL;
+			deleted = false;
 		}
 		IPath(const IPath& p) { *this = p; }
 		IPath& operator = (const IPath& p) {
@@ -39,6 +40,7 @@ namespace QTPFS {
 			boundingBoxMaxs = p.GetBoundingBoxMaxs();
 
 			owner = p.GetOwner();
+			deleted = p.IsDeleted();
 			return *this;
 		}
 		~IPath() { points.clear(); }
@@ -84,6 +86,9 @@ namespace QTPFS {
 
 		void SetOwner(const CSolidObject* o) { owner = o; }
 		const CSolidObject* GetOwner() const { return owner; }
+		int GetOwnerID() const { return (owner != NULL) ? owner->id : -1; }
+		void Delete() { deleted = true; }
+		bool IsDeleted() const { return deleted; }
 
 		unsigned int NumPoints() const { return (points.size()); }
 		void AllocPoints(unsigned int n) {
@@ -118,6 +123,7 @@ namespace QTPFS {
 
 		// object that requested this path (NULL if none)
 		const CSolidObject* owner;
+		bool deleted;
 	};
 };
 

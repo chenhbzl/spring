@@ -27,15 +27,18 @@
 	#include "System/Platform/MessageBox.h"
 #endif
 
-
-static void ExitMessage(const std::string& msg, const std::string& caption, unsigned int flags, bool forced)
+static void ExitMessageLog(const std::string& msg, const std::string& caption, unsigned int flags, bool forced)
 {
 	logSinkHandler.SetSinking(false);
 	if (forced) {
 		LOG_L(L_ERROR, "failed to shutdown normally, exit forced");
 	}
 	LOG_L(L_ERROR, "%s %s", caption.c_str(), msg.c_str());
-	
+	LOG_CLEANUP();
+}
+
+static void ExitMessage(const std::string& msg, const std::string& caption, unsigned int flags, bool forced)
+{
 	if (!forced) {
 	#if !defined(DEDICATED) && !defined(HEADLESS)
 		Platform::MsgBox(msg, caption, flags);
@@ -61,6 +64,7 @@ void ForcedExit(const std::string& msg, const std::string& caption, unsigned int
 	}
 
 	if (!shutdownSucceeded) {
+		ExitMessageLog(msg, caption, flags, true);
 		ExitMessage(msg, caption, flags, true);
 	}
 }
@@ -68,6 +72,7 @@ void ForcedExit(const std::string& msg, const std::string& caption, unsigned int
 void ErrorMessageBox(const std::string& msg, const std::string& caption, unsigned int flags)
 {
 #ifdef DEDICATED
+	ExitMessageLog(msg, caption, flags, false); // output to log file asap, it could crash during cleanup
 	SafeDelete(gameServer);
 	ExitMessage(msg, caption, flags, false);
 
@@ -85,6 +90,8 @@ void ErrorMessageBox(const std::string& msg, const std::string& caption, unsigne
 		//! terminate thread // FIXME: only the (separate) loading thread can catch thread_interrupted
 		throw boost::thread_interrupted();
 	}
+
+	ExitMessageLog(msg, caption, flags, false); // output to log file asap, it could crash during cleanup
 
 	Watchdog::ClearTimer();
 	

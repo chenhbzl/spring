@@ -173,6 +173,11 @@ void CBasicMapDamage::Explosion(const float3& pos, float strength, float radius)
 
 void CBasicMapDamage::RecalcArea(int x1, int x2, int y1, int y2)
 {
+	ASSERT_SINGLETHREADED_SIM();
+	if (Threading::threadedPath) {
+		recalcAreas.push_back(SRectangle(x1, y1, x2, y2));
+		return;
+	}
 	const int decy = std::max(                     0, (y1 * SQUARE_SIZE - CQuadField::QUAD_SIZE / 2) / CQuadField::QUAD_SIZE);
 	const int incy = std::min(quadField->GetNumQuadsZ() - 1, (y2 * SQUARE_SIZE + CQuadField::QUAD_SIZE / 2) / CQuadField::QUAD_SIZE);
 	const int decx = std::max(                     0, (x1 * SQUARE_SIZE - CQuadField::QUAD_SIZE / 2) / CQuadField::QUAD_SIZE);
@@ -207,6 +212,15 @@ void CBasicMapDamage::RecalcArea(int x1, int x2, int y1, int y2)
 void CBasicMapDamage::Update()
 {
 	SCOPED_TIMER("BasicMapDamage::Update");
+	if (!recalcAreas.empty()) {
+		recalcAreas.Optimize();
+		IPathManager::ScopedDisableThreading sdt;
+		for (CRectangleOptimizer::iterator i = recalcAreas.begin(); i != recalcAreas.end(); ++i) {
+			const SRectangle& r = *i;
+			RecalcArea(r.x1, r.x2, r.z1, r.z2);
+		}
+		recalcAreas.clear();
+	}
 
 	std::deque<Explo*>::iterator ei;
 

@@ -153,6 +153,7 @@ namespace
 	DECLARE_FILTER_EX(InPrevSel, 0, prevTypes.find(unit->unitDef->id) != prevTypes.end(),
 		std::set<int> prevTypes;
 		void Prepare() {
+			GML_RECMUTEX_LOCK(sel);
 			prevTypes.clear();
 			const CUnitSet& tu = selectedUnits.selectedUnits;
 			for (CUnitSet::const_iterator si = tu.begin(); si != tu.end(); ++si) {

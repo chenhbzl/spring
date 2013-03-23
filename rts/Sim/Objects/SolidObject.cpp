@@ -18,6 +18,8 @@ const float CSolidObject::MINIMUM_MASS = 1e0f; // 1.0f
 const float CSolidObject::MAXIMUM_MASS = 1e6f;
 const float CSolidObject::IMPULSE_RATE = 0.968f;
 
+std::set<CSolidObject *> CSolidObject::solidObjects;
+
 CR_BIND_DERIVED(CSolidObject, CWorldObject, );
 CR_REG_METADATA(CSolidObject,
 (
@@ -106,8 +108,30 @@ CSolidObject::CSolidObject():
 	midPos(pos),
 	mapPos(GetMapPos()),
 	blockMap(NULL),
-	buildFacing(0)
+	buildFacing(0),
+#if STABLE_UPDATE
+	stableBlocking(false),
+	stablePos(pos),
+	stableMidPos(pos),
+	stableHeight(0.0f),
+	stableIsUnderWater(false),
+	stableRadius(0.0f),
+	stableXSize(1),
+	stableZSize(1),
+	stableMass(DEFAULT_MASS),
+	stableFrontDir(0.0f, 0.0f, 1.0f),
+	stableRightDir(-1.0f, 0.0f, 0.0f),
+	stableUpDir(0.0f, 1.0f, 0.0f),
+	stableSpeed(ZeroVector),
+	stableIsMoving(false),
+	stableCrushable(false),
+	stableCrushResistance(0.0f),
+	stablePhysicalState(OnGround),
+	stableTeam(0),
+	stableBlockEnemyPushing(true)
+#endif
 {
+	solidObjects.insert(this);
 }
 
 CSolidObject::~CSolidObject() {
@@ -115,9 +139,90 @@ CSolidObject::~CSolidObject() {
 
 	delete collisionVolume;
 	collisionVolume = NULL;
+	solidObjects.erase(this);
 }
 
+#if STABLE_UPDATE
+void CSolidObject::StableSlowUpdate() {
+	stableCrushable = crushable;
+	stableCrushResistance = crushResistance;
+	stableHeight = height;
+	stableXSize = xsize;
+	stableZSize = zsize;
+	stableFrontDir = frontdir;
+	stableRightDir = rightdir;
+	stableUpDir = updir;
+	stableMass = mass;
+	stableRadius = radius;
+	stableBlocking = blocking;
+	stableIsUnderWater = isUnderWater;
+	stablePhysicalState = physicalState;
+	stableTeam = team;
+	stableBlockEnemyPushing = blockEnemyPushing;
+}
 
+void CSolidObject::StableUpdate(bool slow) {
+	if (slow)
+		StableSlowUpdate();
+	stablePos = pos;
+	stableMidPos = midPos;
+	stableSpeed = speed;
+	stableIsMoving = isMoving;
+}
+void CSolidObject::StableInit(bool stable) {
+	if (stable) {
+		pStableBlocking = &stableBlocking;
+		pStablePos = &stablePos;
+		pStableMidPos = &stableMidPos;
+		pStableHeight = &stableHeight;
+		pStableIsUnderWater = &stableIsUnderWater;
+		pStableRadius = &stableRadius;
+		pStableXSize = &stableXSize;
+		pStableZSize = &stableZSize;
+		pStableMass = &stableMass;
+		pStableFrontDir = &stableFrontDir;
+		pStableRightDir = &stableRightDir;
+		pStableUpDir = &stableUpDir;
+		pStableSpeed = &stableSpeed;
+		pStableIsMoving = &stableIsMoving;
+		pStableCrushable = &stableCrushable;
+		pStableCrushResistance = &stableCrushResistance;
+		pStablePhysicalState = &stablePhysicalState;
+		pStableTeam = &stableTeam;
+		pStableBlockEnemyPushing = &stableBlockEnemyPushing;
+	} else {
+		pStableBlocking = &blocking;
+		pStablePos = &pos;
+		pStableMidPos = &midPos;
+		pStableHeight = &height;
+		pStableIsUnderWater = &isUnderWater;
+		pStableRadius = &radius;
+		pStableXSize = &xsize;
+		pStableZSize = &zsize;
+		pStableMass = &mass;
+		pStableFrontDir = &frontdir;
+		pStableRightDir = &rightdir;
+		pStableUpDir = &updir;
+		pStableSpeed = &speed;
+		pStableIsMoving = &isMoving;
+		pStableCrushable = &crushable;
+		pStableCrushResistance = &crushResistance;
+		pStablePhysicalState = &physicalState;
+		pStableTeam = &team;
+		pStableBlockEnemyPushing = &blockEnemyPushing;
+	}
+}
+#endif
+
+void CSolidObject::UpdateStableData() {
+#if STABLE_UPDATE
+	int upd = gs->frameNum & 7;
+	for (std::set<CSolidObject *>::iterator i = solidObjects.begin(); i != solidObjects.end(); ++i) {
+		CSolidObject *s = *i;
+		s->StableUpdate((s->id & 7) == upd);
+	}
+#endif
+}
 
 void CSolidObject::UnBlock() {
 	if (isMarkedOnBlockingMap) {
@@ -232,4 +337,3 @@ void CSolidObject::Kill(const float3& impulse, bool crushKill) {
 	DamageArray damage(health + 1.0f);
 	DoDamage(damage, impulse, NULL, -DAMAGE_EXTSOURCE_KILLED, -1);
 }
-

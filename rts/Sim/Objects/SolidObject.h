@@ -7,8 +7,11 @@
 #include "System/Matrix44f.h"
 #include "System/Vec2.h"
 #include "System/Misc/BitwiseEnum.h"
+#include "System/Platform/Threading.h"
 #include "System/Sync/SyncedFloat3.h"
 #include "System/Sync/SyncedPrimitive.h"
+#include <deque>
+
 
 struct MoveDef;
 struct CollisionVolume;
@@ -61,6 +64,67 @@ public:
 		DAMAGE_EXTSOURCE_FIRE   = 4,
 		DAMAGE_EXTSOURCE_WATER  = 5, // lava/acid/etc
 		DAMAGE_EXTSOURCE_KILLED = 6,
+	};
+	enum DelayOpType {
+		SCRIPT_STOPMOVING,
+		SCRIPT_STARTMOVING,
+		SCRIPT_LANDED,
+		SCRIPT_MOVERATE,
+		CAI_SLOWUPDATE,
+		CAI_STOPMOVE,
+		CAI_GIVECOMMAND,
+		CAI_WAITSTOP,
+		FAIL,
+		ACTIVATE,
+		DEACTIVATE,
+		BLOCK,
+		UNBLOCK,
+		UNITUNIT_COLLISION,
+		UNITFEAT_COLLISION,
+		BUGGEROFF,
+		KILLUNIT,
+		MOVE,
+		UNRESERVEPAD,
+		CHECKNOTIFY,
+		MOVE_FEATURE,
+		MOVE_UNIT,
+		DODAMAGE,
+		CHANGE_SPEED,
+		KILL,
+		SET_SKIDDING,
+		UPDATE_MIDAIMPOS,
+		ADDBUILDPOWER,
+		GETAIRBASEPADPOS,
+		MOVE_UNIT_OLDPOS,
+		CHANGE_TARGETHEADING,
+		SMOKE_PROJECTILE,
+		ADD_UNIT_IMPULSE
+	};
+	struct DelayOp {
+		DelayOp(DelayOpType t) : type(t), obj(NULL), vec(ZeroVector), damage(0.0f), dmgtype(0) {}
+		DelayOp(DelayOpType t, const CSolidObject *o) : type(t), obj(o), vec(ZeroVector), damage(0.0f), dmgtype(0) {}
+		DelayOp(DelayOpType t, const CSolidObject *o, bool bs) : type(t), obj(o), vec(ZeroVector), bset(bs), dmgtype(0) {}
+		DelayOp(DelayOpType t, int d) : type(t), data(d), vec(ZeroVector), damage(0.0f), dmgtype(0) {}
+		DelayOp(DelayOpType t, const CSolidObject *o, const float3& v) : type(t), obj(o), vec(v), damage(0.0f), dmgtype(0) {}
+		DelayOp(DelayOpType t, const CSolidObject *o, const float3& v, bool rel, bool tc) : type(t), obj(o), vec(v), relative(rel), terrcheck(tc) {}
+		DelayOp(DelayOpType t, const CSolidObject *o, bool crs, const float3& v) : type(t), obj(o), vec(v), crush(crs), dmgtype(0) {}
+		DelayOp(DelayOpType t, const CSolidObject *o, float dmg, const float3& impulse, int dt) : type(t), obj(o), vec(impulse), damage(dmg), dmgtype(dt) {}
+		DelayOp(DelayOpType t, const CSolidObject *o, const float3& add, float mul) : type(t), obj(o), vec(add), mult(mul), dmgtype(0) {}
+		DelayOp(DelayOpType t, float amt, const CSolidObject *o) : type(t), obj(o), vec(ZeroVector), amount(amt), dmgtype(0) {}
+		DelayOpType type;
+		union {
+			const CSolidObject *obj;
+			int data;
+		};
+		float3 vec;
+		union {
+			float damage, mult, amount, mscale;
+			bool relative, crush, bset, deathseq;
+		};
+		union {
+			int dmgtype;
+			bool terrcheck;
+		};
 	};
 
 	CSolidObject();
@@ -226,6 +290,85 @@ public:
 	const YardMapStatus* blockMap;              ///< Current (unrotated!) blockmap/yardmap of this object. 0 means no active yardmap => all blocked.
 	short int buildFacing;                      ///< Orientation of footprint, 4 different states
 
+	/// quads the object is part of
+	std::vector<int> quads;
+
+#if STABLE_UPDATE
+	bool stableBlocking, *pStableBlocking;
+	float3 stablePos, *pStablePos;
+	SyncedFloat3 stableMidPos, *pStableMidPos;
+	float stableHeight, *pStableHeight;
+	bool stableIsUnderWater, *pStableIsUnderWater;
+	float stableRadius, *pStableRadius;
+	int stableXSize, *pStableXSize;
+	int stableZSize, *pStableZSize;
+	float stableMass, *pStableMass;
+	SyncedFloat3 stableFrontDir, *pStableFrontDir;
+	SyncedFloat3 stableRightDir, *pStableRightDir;
+	SyncedFloat3 stableUpDir, *pStableUpDir;
+	float3 stableSpeed, *pStableSpeed;
+	bool stableIsMoving, *pStableIsMoving;
+	bool stableCrushable, *pStableCrushable;
+	float stableCrushResistance, *pStableCrushResistance;
+	PhysicalState stablePhysicalState, *pStablePhysicalState;
+	int stableTeam, *pStableTeam;
+	bool stableBlockEnemyPushing, *pStableBlockEnemyPushing;
+	// shall return "stable" values, that do not suddenly change during a sim frame. (for multithreading purposes)
+	const bool StableBlocking() const { return *pStableBlocking; }
+	const float3& StablePos() const { return *pStablePos; }
+	const SyncedFloat3& StableMidPos() const { return *pStableMidPos; }
+	const float StableHeight() const { return *pStableHeight; }
+	const bool StableUnderWater() const { return *pStableIsUnderWater; }
+	const float StableRadius() const { return *pStableRadius; }
+	const int StableXSize() const { return *pStableXSize; }
+	const int StableZSize() const { return *pStableZSize; }
+	const float StableMass() const { return *pStableMass; }
+	const SyncedFloat3& StableFrontDir() const { return *pStableFrontDir; }
+	const SyncedFloat3& StableRightDir() const { return *pStableRightDir; }
+	const SyncedFloat3& StableUpDir() const { return *pStableUpDir; }
+	const float3& StableSpeed() const { return *pStableSpeed; }
+	const bool StableIsMoving() const { return *pStableIsMoving; }
+	const bool StableCrushable() const { return *pStableCrushable; }
+	const float StableCrushResistance() const { return *pStableCrushResistance; }
+	const bool StableImmobile() const { return immobile; } // is stable by itself
+	const PhysicalState StablePhysicalState() const { return *pStablePhysicalState; }
+	const int StableAllyTeam() const { return allyteam; } // is stable by itself
+	const int StableTeam() const { return *pStableTeam; }
+	const bool StableBlockEnemyPushing() const { return *pStableBlockEnemyPushing; }
+
+	void StableInit(bool stable);
+	virtual void StableUpdate(bool slow);
+	void StableSlowUpdate();
+#else
+	const bool StableBlocking() const { return blocking; }
+	const float3& StablePos() const { return pos; }
+	const SyncedFloat3& StableMidPos() const { return midPos; }
+	const float StableHeight() const { return height; }
+	const bool StableUnderWater() const { return isUnderWater; }
+	const float StableRadius() const { return radius; }
+	const int StableXSize() const { return xsize; }
+	const int StableZSize() const { return zsize; }
+	const float StableMass() const { return mass; }
+	const SyncedFloat3& StableFrontDir() const { return frontdir; }
+	const SyncedFloat3& StableRightDir() const { return rightdir; }
+	const SyncedFloat3& StableUpDir() const { return updir; }
+	const float3& StableSpeed() const { return speed; }
+	const bool StableIsMoving() const { return isMoving; }
+	const bool StableCrushable() const { return crushable; }
+	const float StableCrushResistance() const { return crushResistance; }
+	const bool StableImmobile() const { return immobile; }
+	const PhysicalState StablePhysicalState() const { return physicalState; }
+	const int StableAllyTeam() const { return allyteam; } // is stable by itself
+	const int StableTeam() const { return team; }
+	const bool StableBlockEnemyPushing() const { return blockEnemyPushing; }
+
+	void StableInit(bool stable) {}
+	void StableUpdate(bool slow) {}
+#endif
+
+
+	std::deque<DelayOp> delayOps;
+
 	static const float DEFAULT_MASS;
 	static const float MINIMUM_MASS;
 	static const float MAXIMUM_MASS;
@@ -236,6 +379,8 @@ public:
 	// returns the object (command reference) id of the object currently being deleted,
 	// for units this equals unit->id, and for features feature->id + unitHandler->MaxUnits()
 	static int GetDeletingRefID() { return deletingRefID; }
+	static std::set<CSolidObject *> solidObjects;
+	static void UpdateStableData();
 };
 
 #endif // SOLID_OBJECT_H

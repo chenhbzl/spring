@@ -43,6 +43,7 @@ SET(sources_engine_System_common
 		"${CMAKE_CURRENT_SOURCE_DIR}/Platform/Misc.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Platform/SharedLib.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Platform/ScopedFileLock.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/Platform/SimThreadPool.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Platform/Threading.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Platform/Watchdog.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Platform/WindowManagerHelper.cpp"

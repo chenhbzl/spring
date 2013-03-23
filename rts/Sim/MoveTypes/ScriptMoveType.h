@@ -37,11 +37,11 @@ class CScriptMoveType : public AMoveType
 		void SetMaxSpeed(float speed) {}
 		void SetWantedMaxSpeed(float speed) {}
 		void LeaveTransport() {}
+		void CheckNotify();
 
 	protected:
 		void CalcDirections();
 		void CheckLimits();
-		void CheckNotify();
 
 	public:
 		int tag;

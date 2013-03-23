@@ -6,6 +6,7 @@
 	${!echonow} "Processing: engine"
 
 	!insertmacro extractFile "${MIN_PORTABLE_ARCHIVE}" "spring_engine.7z" ""
+	!insertmacro extractFile "${SPRING_ST_ARCHIVE}" "spring_engine_st.7z" ""
 
 	CreateDirectory "$INSTDIR\maps"
 	CreateDirectory "$INSTDIR\games"

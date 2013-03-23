@@ -31,7 +31,9 @@ namespace Sync {
 		CSyncDebugger::GetInstance()->Sync(p, size, msg);
 #endif
 #ifdef SYNCCHECK
+#ifndef USE_DESYNC_DETECTOR
 		assert(CSyncChecker::InSyncedCode());
+#endif
 		CSyncChecker::Sync(p, size);
 	#ifdef TRACE_SYNC_HEAVY
 		tracefile << "Sync " << msg << " " << CSyncChecker::GetChecksum() << "\n";

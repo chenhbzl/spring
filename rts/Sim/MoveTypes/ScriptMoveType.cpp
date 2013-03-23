@@ -77,7 +77,7 @@ CScriptMoveType::~CScriptMoveType()
 	// clean up if noBlocking was made true at
 	// some point during this script's lifetime
 	// and not reset
-	owner->Block();
+	owner->QueBlock(); // MT PROBLEM ?
 }
 
 #if defined(USE_GML) && defined(__GNUC__) && (__GNUC__ == 4)
@@ -101,6 +101,7 @@ inline void CScriptMoveType::CalcDirections()
 
 void CScriptMoveType::CheckNotify()
 {
+	ASSERT_SINGLETHREADED_SIM();
 	if (scriptNotify) {
 		if (luaRules && luaRules->MoveCtrlNotify(owner, scriptNotify)) {
 			// NOTE: deletes \<this\>
@@ -167,17 +168,17 @@ bool CScriptMoveType::Update()
 
 	// don't need the rest if the pos hasn't changed
 	if (oldPos == owner->pos) {
-		CheckNotify();
+		owner->QueCheckNotify();
 		return false;
 	}
 
 	oldPos = owner->pos;
 
 	if (!noBlocking) {
-		owner->Block();
+		owner->QueBlock();
 	}
 
-	CheckNotify();
+	owner->QueCheckNotify();
 	return true;
 }
 
@@ -248,8 +249,8 @@ void CScriptMoveType::SetNoBlocking(bool state)
 	noBlocking = state;
 
 	if (noBlocking) {
-		owner->UnBlock();
+		owner->QueUnBlock();
 	} else {
-		owner->Block();
+		owner->QueBlock();
 	}
 }

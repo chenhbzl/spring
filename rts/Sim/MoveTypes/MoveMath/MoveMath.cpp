@@ -183,10 +183,10 @@ bool CMoveMath::IsBlockedStructureZmax(const MoveDef& moveDef, int xSquare, int 
  */
 bool CMoveMath::CrushResistant(const MoveDef& colliderMD, const CSolidObject* collidee)
 {
-	if (!collidee->blocking) { return false; }
-	if (!collidee->crushable) { return true; }
+	if (!collidee->StableBlocking()) { return false; }
+	if (!collidee->StableCrushable()) { return true; }
 
-	return (collidee->crushResistance > colliderMD.crushStrength);
+	return (collidee->StableCrushResistance() > colliderMD.crushStrength);
 }
 
 /*
@@ -199,13 +199,13 @@ bool CMoveMath::IsNonBlocking(const MoveDef& colliderMD, const CSolidObject* col
 		return true;
 
 	if (collider != NULL)
-		return IsNonBlocking(collidee, collider->moveDef, collider->pos, collider->height);
+		return IsNonBlocking(collidee, collider->moveDef, collider->StablePos(), collider->StableHeight());
 
-	if (!collidee->blocking)
+	if (!collidee->StableBlocking())
 		return true;
 
 	// if obstacle is out of map bounds, it cannot block us
-	if (!collidee->pos.IsInBounds())
+	if (!collidee->StablePos().IsInBounds())
 		return true;
 
 	// (code below is only reachable from stand-alone PE invocations)
@@ -229,13 +229,13 @@ bool CMoveMath::IsNonBlocking(const MoveDef& colliderMD, const CSolidObject* col
 	//
 
 	//const float colliderMdlHgt = 1e6;
-	const float collideeMdlHgt = math::fabs(collidee->height);
+	const float collideeMdlHgt = math::fabs(collidee->StableHeight());
 	//const float colliderGndAlt = 1e6f;
-	const float collideeGndAlt = collidee->pos.y;
+	const float collideeGndAlt = collidee->StablePos().y;
 
 	if (colliderMD.followGround) {
 		const float collideeMinHgt = collideeGndAlt - collideeMdlHgt;
-		const float colliderMaxHgt = ground->GetHeightReal(collidee->pos.x, collidee->pos.z) + (SQUARE_SIZE >> 1);
+		const float colliderMaxHgt = ground->GetHeightReal(collidee->StablePos().x, collidee->StablePos().z) + (SQUARE_SIZE >> 1);
 		// FIXME: would be the correct way, but values are invalid here
 		// const float colliderMaxHgt = colliderGndAlt + colliderMdlHgt;
 
@@ -257,17 +257,17 @@ bool CMoveMath::IsNonBlocking(const MoveDef& colliderMD, const CSolidObject* col
 
 bool CMoveMath::IsNonBlocking(const CSolidObject* collidee, const MoveDef* colliderMD, const float3 colliderPos, const float colliderHeight)
 {
-	if (!collidee->blocking)
+	if (!collidee->StableBlocking())
 		return true;
 
 	// if obstacle is out of map bounds, it cannot block us
-	if (!collidee->pos.IsInBounds())
+	if (!collidee->StablePos().IsInBounds())
 		return true;
 
 	const float colliderMdlHgt = colliderHeight;
-	const float collideeMdlHgt = math::fabs(collidee->height);
+	const float collideeMdlHgt = math::fabs(collidee->StableHeight());
 	const float colliderGndAlt = colliderPos.y;
-	const float collideeGndAlt = collidee->pos.y;
+	const float collideeGndAlt = collidee->StablePos().y;
 
 	// simple case: if unit and obstacle have non-zero
 	// vertical separation as measured by their (model)
@@ -305,14 +305,14 @@ CMoveMath::BlockType CMoveMath::SquareIsBlocked(const MoveDef& moveDef, int xSqu
 			continue;
 		}
 
-		if (!obstacle->immobile) {
+		if (!obstacle->StableImmobile()) {
 			// mobile obstacle
-			if (obstacle->isMoving) {
+			if (obstacle->StableIsMoving()) {
 				r |= BLOCK_MOVING;
 			} else {
 				const CUnit* u = static_cast<const CUnit*>(obstacle);
 
-				if (!u->beingBuilt && u->commandAI->commandQue.empty()) {
+				if (!u->StableBeingBuilt() && u->StableCommandQueEmpty()) {
 					// idling mobile unit
 					r |= BLOCK_MOBILE;
 				} else {

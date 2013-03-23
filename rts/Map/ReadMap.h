@@ -10,6 +10,7 @@
 #include "System/float3.h"
 #include "System/creg/creg_cond.h"
 #include "System/Misc/RectangleOptimizer.h"
+#include "System/Platform/Threading.h"
 
 #define USE_UNSYNCED_HEIGHTMAP
 
@@ -251,6 +252,7 @@ inline const float* CReadMap::GetSlopeMap(const bool& synced) {
 
 
 inline float CReadMap::SetHeight(const int idx, const float h, const int add) {
+	ASSERT_SINGLETHREADED_SIM();
 	float& x = (*heightMapSyncedPtr)[idx];
 
 	// add=0 <--> x = x*0 + h =   h
@@ -264,6 +266,7 @@ inline float CReadMap::SetHeight(const int idx, const float h, const int add) {
 }
 
 inline float CReadMap::AddHeight(const int idx, const float a) {
+	ASSERT_SINGLETHREADED_SIM();
 	return SetHeight(idx, a, 1);
 }
 

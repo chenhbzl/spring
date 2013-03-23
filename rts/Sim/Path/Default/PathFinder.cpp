@@ -245,6 +245,7 @@ IPath::SearchResult CPathFinder::DoSearch(const MoveDef& moveDef, const CPathFin
 
 		// Mark this square as closed.
 		squareStates.nodeMask[os->nodeNum] |= PATHOPT_CLOSED;
+		dirtySquares.push_back(os->nodeNum);
 	}
 
 	if (foundGoal)

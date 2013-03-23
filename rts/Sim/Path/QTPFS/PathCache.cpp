@@ -8,6 +8,7 @@
 #include "Sim/Misc/GlobalConstants.h"
 #include "Sim/Misc/CollisionHandler.h"
 #include "Sim/Misc/CollisionVolume.h"
+#include "Sim/Objects/SolidObject.h"
 #include "System/Rectangle.h"
 
 static void GetRectangleCollisionVolume(const SRectangle& r, CollisionVolume& v, float3& rm) {
@@ -65,28 +66,69 @@ QTPFS::IPath* QTPFS::PathCache::GetPath(unsigned int pathID, unsigned int pathTy
 	return path;
 }
 
-
+inline void ErasePathIDs(std::map<int, std::list<QTPFS::IPath*> >& map, int ownerid, int pathid) {
+	std::map<int, std::list<QTPFS::IPath*> >::iterator m = map.find(ownerid);
+	if (m != map.end()) {
+		for (std::list<QTPFS::IPath*>::iterator i = m->second.begin(); i != m->second.end(); ) {
+			((*i)->GetID() == pathid) ? i = m->second.erase(i) : ++i;
+		}
+	}
+}
 
 void QTPFS::PathCache::AddTempPath(IPath* path) {
+	assert(!path->IsDeleted());
 	assert(path->GetID() != 0);
 	assert(path->NumPoints() == 2);
 	assert(tempPaths.find(path->GetID()) == tempPaths.end());
 	assert(livePaths.find(path->GetID()) == livePaths.end());
+	allPaths[path->GetID()] = path;
 
+	if (Threading::threadedPath)
+		return newTempPaths[path->GetOwnerID()].push_back(path);
+
+	ErasePathIDs(newTempPaths, path->GetOwnerID(), path->GetID());
 	tempPaths.insert(std::pair<unsigned int, IPath*>(path->GetID(), path));
 }
 
 void QTPFS::PathCache::AddLivePath(IPath* path) {
+	assert(!path->IsDeleted());
 	assert(path->GetID() != 0);
 	assert(path->NumPoints() >= 2);
 
-	assert(tempPaths.find(path->GetID()) != tempPaths.end());
+//	assert(tempPaths.find(path->GetID()) != tempPaths.end());
 	assert(livePaths.find(path->GetID()) == livePaths.end());
-	assert(deadPaths.find(path->GetID()) == deadPaths.end());
+//	assert(deadPaths.find(path->GetID()) == deadPaths.end());
+	allPaths[path->GetID()] = path;
+	ErasePathIDs(newTempPaths, path->GetOwnerID(), path->GetID());
 
+	if (Threading::threadedPath)
+		return newLivePaths[path->GetOwnerID()].push_back(path);
 	// promote a path from temporary- to live-status (no deletion)
 	tempPaths.erase(path->GetID());
+	ErasePathIDs(newLivePaths, path->GetOwnerID(), path->GetID());
 	livePaths.insert(std::pair<unsigned int, IPath*>(path->GetID(), path));
+}
+
+void QTPFS::PathCache::Merge() {
+	for (std::map<int, std::list<IPath*> >::iterator i = newTempPaths.begin(); i != newTempPaths.end(); ++i) {
+		while (!i->second.empty()) {
+			AddTempPath(i->second.front());
+		}
+	}
+	newTempPaths.clear();
+	for (std::map<int, std::list<IPath*> >::iterator i = newLivePaths.begin(); i != newLivePaths.end(); ++i) {
+		while (!i->second.empty()) {
+			AddLivePath(i->second.front());
+		}
+	}
+	newLivePaths.clear();
+	for (std::map<int, std::list<IPath*> >::iterator i = newDelPaths.begin(); i != newDelPaths.end(); ++i) {
+		while (!i->second.empty()) {
+			DelPath(i->second.front()->GetID());
+			i->second.pop_front();
+		}
+	}
+	newDelPaths.clear();
 }
 
 void QTPFS::PathCache::DelPath(unsigned int pathID) {
@@ -95,23 +137,36 @@ void QTPFS::PathCache::DelPath(unsigned int pathID) {
 	// tempPaths between QueueDeadPathSearches and KillDeadPaths)
 	PathMapIt it;
 
-	if ((it = tempPaths.find(pathID)) != tempPaths.end()) {
+	IPath* path = NULL;
+	int ownerid = -2;
+	if ((it = allPaths.find(pathID)) != allPaths.end()) {
+		path = it->second;
+		if (!path->IsDeleted()) {
+			ownerid = path->GetOwnerID();
+			ErasePathIDs(newTempPaths, ownerid, pathID);
+			ErasePathIDs(newLivePaths, ownerid, pathID);
+			path->Delete();
+		}
+	}
+	if (Threading::threadedPath) {
+		if (ownerid >= -1)
+			newDelPaths[ownerid].push_back(path);
+		return;
+	}
+	if (path != NULL) {
+		allPaths.erase(it);
+		delete path;
+	}
+	if (tempPaths.erase(pathID)) {
 		assert(livePaths.find(pathID) == livePaths.end());
 		assert(deadPaths.find(pathID) == deadPaths.end());
-		delete (it->second);
-		tempPaths.erase(it);
 		return;
 	}
-	if ((it = livePaths.find(pathID)) != livePaths.end()) {
+	if (livePaths.erase(pathID)) {
 		assert(deadPaths.find(pathID) == deadPaths.end());
-		delete (it->second);
-		livePaths.erase(it);
 		return;
 	}
-	if ((it = deadPaths.find(pathID)) != deadPaths.end()) {
-		delete (it->second);
-		deadPaths.erase(it);
-	}
+	deadPaths.erase(pathID);
 }
 
 
@@ -124,6 +179,8 @@ bool QTPFS::PathCache::MarkDeadPaths(const SRectangle& r) {
 
 	if (livePaths.empty())
 		return false;
+
+//	assert(!Threading::threadedPath);
 
 	// NOTE: not static, we run in multiple threads
 	CollisionVolume rv;
@@ -183,7 +240,8 @@ bool QTPFS::PathCache::MarkDeadPaths(const SRectangle& r) {
 			// remember the ID of each path affected by the deformation
 			if (havePointInRect || edgeCrossesRect) {
 				assert(tempPaths.find(path->GetID()) == tempPaths.end());
-				deadPaths.insert(std::pair<unsigned int, IPath*>(path->GetID(), path));
+				if (!path->IsDeleted())
+					deadPaths.insert(std::pair<unsigned int, IPath*>(path->GetID(), path));
 				livePathIts.push_back(it);
 				break;
 			}
@@ -198,13 +256,16 @@ bool QTPFS::PathCache::MarkDeadPaths(const SRectangle& r) {
 }
 
 void QTPFS::PathCache::KillDeadPaths() {
+//	assert(!Threading::threadedPath);
+
 	for (PathMap::const_iterator deadPathsIt = deadPaths.begin(); deadPathsIt != deadPaths.end(); ++deadPathsIt) {
+		assert(!deadPathsIt->second->IsDeleted());
 		// NOTE: "!=" because re-requested dead paths go onto the temp-pile
-		assert(tempPaths.find(deadPathsIt->first) != tempPaths.end());
+//		assert(tempPaths.find(deadPathsIt->first) != tempPaths.end());
 		assert(livePaths.find(deadPathsIt->first) == livePaths.end());
+		assert(allPaths.find(deadPathsIt->second->GetID()) != allPaths.end() && allPaths.find(deadPathsIt->second->GetID())->second != deadPathsIt->second);
 		delete (deadPathsIt->second);
 	}
 
 	deadPaths.clear();
 }
-

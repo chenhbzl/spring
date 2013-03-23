@@ -377,7 +377,7 @@ void CBuilder::Update()
 						}
 						if (curResurrect->resurrectProgress > 1) {
 							// resurrect finished
-							curResurrect->UnBlock();
+							curResurrect->QueUnBlock();
 
 							UnitLoadParams resurrecteeParams = {ud, this, curResurrect->pos, ZeroVector, -1, team, curResurrect->buildFacing, false, false};
 							CUnit* resurrectee = unitLoader->LoadUnit(resurrecteeParams);

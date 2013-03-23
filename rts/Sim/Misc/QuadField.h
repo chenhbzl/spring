@@ -50,6 +50,10 @@ public:
  	 * and performs the search within a sphere or cylinder depending on @c spherical
 	 */
 	std::vector<CUnit*> GetUnitsExact(const float3& pos, float radius, bool spherical = true);
+	std::vector<CUnit*> StableGetUnitsExact(const float3& pos, float radius);
+	std::vector<CFeature*> StableGetFeaturesExact(const float3& pos, float radius);
+	void StableGetUnitsAndFeaturesExact(const float3& pos, float radius, std::vector<CUnit*>& units, std::vector<CFeature*>& features);
+	std::vector<CSolidObject*> StableGetSolidsExact(const float3& pos, float radius);
 	/**
 	 * Returns all units within the rectangle defined by
 	 * mins and maxs, which extends infinitely along the y-axis

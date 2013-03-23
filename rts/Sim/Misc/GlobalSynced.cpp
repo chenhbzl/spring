@@ -69,6 +69,9 @@ CGlobalSynced::CGlobalSynced()
 	pwr2mapx = mapx; //next_power_of_2(mapx);
 	pwr2mapy = mapy; //next_power_of_2(mapy);
 	randSeed = 18655;
+	for (int i = 0; i < MAX_UNITS; ++i)
+		randSeeds[i] = (randInt() << 16) | randInt();
+	randSeed = 18655; // again
 	initRandSeed = randSeed;
 	frameNum = 0;
 	speedFactor = 1;
@@ -112,8 +115,16 @@ void CGlobalSynced::LoadFromSetup(const CGameSetup* setup)
  */
 int CGlobalSynced::randInt()
 {
+	ASSERT_SINGLETHREADED_SIM();
 	randSeed = (randSeed * 214013L + 2531011L);
 	return (randSeed >> 16) & RANDINT_MAX;
+}
+
+int CGlobalSynced::randInt(const CSolidObject *o)
+{
+	int& rs = randSeeds[o->id];
+	rs = (rs * 214013L + 2531011L);
+	return (rs >> 16) & RANDINT_MAX;
 }
 
 /**
@@ -123,8 +134,16 @@ int CGlobalSynced::randInt()
  */
 float CGlobalSynced::randFloat()
 {
+	ASSERT_SINGLETHREADED_SIM();
 	randSeed = (randSeed * 214013L + 2531011L);
 	return float((randSeed >> 16) & RANDINT_MAX)/RANDINT_MAX;
+}
+
+float CGlobalSynced::randFloat(const CSolidObject *o)
+{
+	int& rs = randSeeds[o->id];
+	rs = (rs * 214013L + 2531011L);
+	return float((rs >> 16) & RANDINT_MAX)/RANDINT_MAX;
 }
 
 /**
@@ -134,11 +153,24 @@ float CGlobalSynced::randFloat()
  */
 float3 CGlobalSynced::randVector()
 {
+	ASSERT_SINGLETHREADED_SIM();
 	float3 ret;
 	do {
 		ret.x = randFloat()*2-1;
 		ret.y = randFloat()*2-1;
 		ret.z = randFloat()*2-1;
+	} while(ret.SqLength()>1);
+
+	return ret;
+}
+
+float3 CGlobalSynced::randVector(const CSolidObject *o)
+{
+	float3 ret;
+	do {
+		ret.x = randFloat(o)*2-1;
+		ret.y = randFloat(o)*2-1;
+		ret.z = randFloat(o)*2-1;
 	} while(ret.SqLength()>1);
 
 	return ret;

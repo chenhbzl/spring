@@ -22,10 +22,13 @@
 #include "System/Config/ConfigHandler.h"
 #include "System/EventHandler.h"
 #include "System/Log/ILog.h"
+#include "System/Platform/SimThreadPool.h"
 #include "System/TimeProfiler.h"
 #include "System/creg/STL_Map.h"
 #include "System/creg/STL_List.h"
 #include "lib/gml/gmlmut.h"
+
+static void ProjectileCollisionThreadFuncStatic(bool threaded) { projectileHandler->ProjectileCollisionThreadFunc(threaded); }
 
 // reserve 5% of maxNanoParticles for important stuff such as capture and reclaim other teams' units
 #define NORMAL_NANO_PRIO 0.95f
@@ -380,14 +383,13 @@ void CProjectileHandler::AddProjectile(CProjectile* p)
 
 void CProjectileHandler::CheckUnitCollisions(
 	CProjectile* p,
-	std::vector<CUnit*>& tempUnits,
-	CUnit** endUnit,
+	std::vector<CUnit*>& units,
 	const float3& ppos0,
 	const float3& ppos1)
 {
 	CollisionQuery cq;
 
-	for (CUnit** ui = &tempUnits[0]; ui != endUnit; ++ui) {
+	for (std::vector<CUnit*>::iterator ui = units.begin(); ui != units.end(); ++ui) {
 		CUnit* unit = *ui;
 
 		const CUnit* attacker = p->owner();
@@ -408,17 +410,9 @@ void CProjectileHandler::CheckUnitCollisions(
 		}
 
 		if (CCollisionHandler::DetectHit(unit, ppos0, ppos1, &cq)) {
-			if (cq.GetHitPiece() != NULL) {
-				unit->SetLastAttackedPiece(cq.GetHitPiece(), gs->frameNum);
-			}
-
-			if (!cq.InsideHit()) {
-				p->SetPos(cq.GetHitPos());
-				p->Collision(unit);
-				p->SetPos(ppos0);
-			} else {
-				p->Collision(unit);
-			}
+			// when the testpos is in the colvol DetectHit() sometimes
+			// returns the colvols center as colpos, so use ppos0 in that case
+			p->QueCollision(unit, cq.GetHitPiece(), cq.InsideHit(), cq.GetHitPos(), ppos0);
 
 			break;
 		}
@@ -427,8 +421,7 @@ void CProjectileHandler::CheckUnitCollisions(
 
 void CProjectileHandler::CheckFeatureCollisions(
 	CProjectile* p,
-	std::vector<CFeature*>& tempFeatures,
-	CFeature** endFeature,
+	std::vector<CFeature*>& features,
 	const float3& ppos0,
 	const float3& ppos1)
 {
@@ -441,7 +434,7 @@ void CProjectileHandler::CheckFeatureCollisions(
 
 	CollisionQuery cq;
 
-	for (CFeature** fi = &tempFeatures[0]; fi != endFeature; ++fi) {
+	for (std::vector<CFeature*>::iterator fi = features.begin(); fi != features.end(); ++fi) {
 		CFeature* feature = *fi;
 
 		if (!feature->blocking) {
@@ -449,88 +442,98 @@ void CProjectileHandler::CheckFeatureCollisions(
 		}
 
 		if (CCollisionHandler::DetectHit(feature, ppos0, ppos1, &cq)) {
-			if (!cq.InsideHit()) {
-				p->SetPos(cq.GetHitPos());
-				p->Collision(feature);
-				p->SetPos(ppos0);
-			} else {
-				p->Collision(feature);
-			}
+			// when the testpos is in the colvol DetectHit() sometimes
+			// returns the colvols center as colpos, so use ppos0 in that case
+			p->QueCollision(feature, cq.InsideHit(), cq.GetHitPos(), ppos0);
 
 			break;
 		}
 	}
 }
 
-void CProjectileHandler::CheckUnitFeatureCollisions(ProjectileContainer& pc) {
-	static std::vector<CUnit*> tempUnits(unitHandler->MaxUnits(), NULL);
-	static std::vector<CFeature*> tempFeatures(unitHandler->MaxUnits(), NULL);
+inline void CProjectileHandler::CheckProjectileCollision(CProjectile *p) {
+	Threading::SetThreadCurrentObjectID(p->synced ? p->id : -1);
+	if (!p->checkCol)
+		return;
+	if (!p->deleteMe) {
+		const float3 ppos0 = p->pos;
+		const float3 ppos1 = p->pos + p->speed;
+		const float speedf = p->speed.Length();
 
-	for (ProjectileContainer::iterator pci = pc.begin(); pci != pc.end(); ++pci) {
-		CProjectile* p = *pci;
+		std::vector<CUnit *> units;
+		std::vector<CFeature *> features;
 
-		if (p->checkCol && !p->deleteMe) {
-			const float3 ppos0 = p->pos;
-			const float3 ppos1 = p->pos + p->speed;
-			const float speedf = p->speed.Length();
+		quadField->StableGetUnitsAndFeaturesExact(p->pos, p->radius + speedf, units, features);
 
-			CUnit** endUnit = &tempUnits[0];
-			CFeature** endFeature = &tempFeatures[0];
+		CheckUnitCollisions(p, units, ppos0, ppos1);
+		CheckFeatureCollisions(p, features, ppos0, ppos1);
+	}
 
-			quadField->GetUnitsAndFeaturesExact(p->pos, p->radius + speedf, endUnit, endFeature);
+	// NOTE: if <p> is a MissileProjectile and does not
+	// have selfExplode set, it will never be removed (!)
+	if (p->GetCollisionFlags() & Collision::NOGROUND)
+		return;
 
-			CheckUnitCollisions(p, tempUnits, endUnit, ppos0, ppos1);
-			CheckFeatureCollisions(p, tempFeatures, endFeature, ppos0, ppos1);
-		}
+	// NOTE: don't add p->radius to groundHeight, or most
+	// projectiles will collide with the ground too early
+	const float groundHeight = ground->GetHeightReal(p->pos.x, p->pos.z);
+	const bool belowGround = (p->pos.y < groundHeight);
+	const bool insideWater = (p->pos.y <= 0.0f && !belowGround);
+	const bool ignoreWater = p->ignoreWater;
+
+	if (belowGround || (insideWater && !ignoreWater)) {
+		// if position has dropped below terrain or into water
+		// where we cannot live, adjust it and explode us now
+		// (if the projectile does not set deleteMe = true, it
+		// will keep hugging the terrain)
+		p->QueCollision(belowGround? groundHeight: 0.0f);
 	}
 }
 
-void CProjectileHandler::CheckGroundCollisions(ProjectileContainer& pc) {
-	ProjectileContainer::iterator pci;
-
-	for (pci = pc.begin(); pci != pc.end(); ++pci) {
-		CProjectile* p = *pci;
-
-		if (!p->checkCol) {
-			continue;
-		}
-
-		// NOTE: if <p> is a MissileProjectile and does not
-		// have selfExplode set, it will never be removed (!)
-		if (p->GetCollisionFlags() & Collision::NOGROUND) {
-			continue;
-		}
-
-		// NOTE: don't add p->radius to groundHeight, or most
-		// projectiles will collide with the ground too early
-		const float groundHeight = ground->GetHeightReal(p->pos.x, p->pos.z);
-		const bool belowGround = (p->pos.y < groundHeight);
-		const bool insideWater = (p->pos.y <= 0.0f && !belowGround);
-		const bool ignoreWater = p->ignoreWater;
-
-		if (belowGround || (insideWater && !ignoreWater)) {
-			// if position has dropped below terrain or into water
-			// where we cannot live, adjust it and explode us now
-			// (if the projectile does not set deleteMe = true, it
-			// will keep hugging the terrain)
-			p->pos.y = belowGround? groundHeight: 0.0f;
-			p->Collision();
-		}
+void CProjectileHandler::CheckCollisionsThreaded(ProjectileContainer &pc, int curPos, int& nextPos) {
+	int countEnd = curPos + pc.size();
+	for(ProjectileContainer::iterator pi = pc.begin(); nextPos < countEnd; nextPos = simThreadPool->NextIter()) {
+		while(curPos < nextPos) { ++pi; ++curPos; }
+		CheckProjectileCollision(*pi);
 	}
 }
 
-void CProjectileHandler::CheckCollisions()
-{
+void CProjectileHandler::ProjectileCollisionThreadFunc(bool threaded) {
+	if (!threaded) {
+		for (ProjectileContainer::iterator pi = syncedProjectiles.begin(); pi != syncedProjectiles.end(); ++pi) {
+			CheckProjectileCollision(*pi);
+		}
+		for (ProjectileContainer::iterator pi = unsyncedProjectiles.begin(); pi != unsyncedProjectiles.end(); ++pi) {
+			CheckProjectileCollision(*pi);
+		}
+		return;
+	}
+	// (threaded)
+	int nextPos = simThreadPool->NextIter();
+	CheckCollisionsThreaded(syncedProjectiles, 0, nextPos);
+	CheckCollisionsThreaded(unsyncedProjectiles, syncedProjectiles.size(), nextPos);
+}
+
+void CProjectileHandler::CheckCollisions() {
 	SCOPED_TIMER("ProjectileHandler::CheckCollisions");
 
-	CheckUnitFeatureCollisions(syncedProjectiles); //! changes simulation state
-	CheckUnitFeatureCollisions(unsyncedProjectiles); //! does not change simulation state
+	Threading::SetMultiThreadedSim(modInfo.multiThreadSim);
+	simThreadPool->Execute(&ProjectileCollisionThreadFuncStatic);
+	Threading::SetMultiThreadedSim(false);
 
-	CheckGroundCollisions(syncedProjectiles); //! changes simulation state
-	CheckGroundCollisions(unsyncedProjectiles); //! does not change simulation state
+	if (modInfo.multiThreadSim) {
+		for (ProjectileContainer::iterator pi = syncedProjectiles.begin(); pi != syncedProjectiles.end(); ++pi) {
+			if (!(*pi)->delayOps.empty()) {
+				(*pi)->ExecuteDelayOps();
+			}
+		}
+		for (ProjectileContainer::iterator pi = unsyncedProjectiles.begin(); pi != unsyncedProjectiles.end(); ++pi) {
+			if (!(*pi)->delayOps.empty()) {
+				(*pi)->ExecuteDelayOps();
+			}
+		}
+	}
 }
-
-
 
 void CProjectileHandler::AddGroundFlash(CGroundFlash* flash)
 {

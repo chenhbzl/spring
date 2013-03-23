@@ -11,6 +11,7 @@
 #include "Sim/Objects/SolidObject.h"
 #include "Sim/Units/UnitHandler.h"
 #include "System/Matrix44f.h"
+#include "System/Platform/Threading.h"
 #include "Sim/Misc/LosHandler.h"
 #include "Sim/Misc/ModInfo.h"
 
@@ -80,6 +81,11 @@ public:
 		}
 	}
 
+	void QueBlock(bool delay = Threading::threadedPath || Threading::multiThreadedSim);
+	void QueUnBlock(bool delay = Threading::threadedPath || Threading::multiThreadedSim);
+
+	void ExecuteDelayOps();
+
 	// NOTE:
 	//   unlike CUnit which recalculates the matrix on each call
 	//   (and uses the synced and error args) CFeature caches it
@@ -116,6 +122,15 @@ public:
 
 	const FeatureDef* def;
 	const UnitDef* udef; /// type of unit this feature should be resurrected to
+
+#if STABLE_UPDATE
+	// shall return "stable" values, that do not suddenly change during a sim frame. (for multithreading purposes)
+	void StableInit(bool stable);
+	virtual void StableUpdate(bool slow);
+	void StableSlowUpdate();
+#else
+	// no stable data
+#endif
 
 	CFireProjectile* myFire;
 

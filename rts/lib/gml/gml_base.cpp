@@ -85,7 +85,16 @@ namespace GML {
 			gmlMaxShareThreadNum = GML_LOAD_THREAD_NUM;
 			gmlNoGLThreadNum = GML_SIM_THREAD_NUM;
 		}
-		gmlThreadCountOverride = configHandler->GetInt("MultiThreadCount");
+		gmlThreadCountOverride = std::max(0, configHandler->GetInt("MultiThreadCount"));
+		if (gmlThreadCountOverride == 0) {
+			int lcpu = Threading::GetAvailableCores();
+			int pcpu = Threading::GetPhysicalCores();
+			// deduct all logical cores dedicated to the rendering/sim main threads
+			gmlThreadCountOverride = lcpu + GML::NumMainThreads() * (1 - (int)(lcpu / pcpu)) - ThreadCountReductionForMultiCore(); // add the main rendering/sim threads
+		}
+#ifdef HEADLESS
+		gmlThreadCountOverride = std::min(2, GML_CPU_COUNT);
+#endif
 		gmlThreadCount = GML_CPU_COUNT;
 
 		if (gmlShareLists) { // create offscreen OpenGL contexts

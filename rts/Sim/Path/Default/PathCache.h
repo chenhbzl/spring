@@ -7,6 +7,7 @@
 #include <list>
 
 #include "IPath.h"
+#include "Sim/Objects/SolidObject.h"
 #include "System/Vec2.h"
 
 class CPathCache
@@ -24,11 +25,13 @@ public:
 		int pathType;
 	};
 
-	void AddPath(IPath::Path* path, IPath::SearchResult result, int2 startBlock,int2 goalBlock,float goalRadius,int pathType);
+	void AddPath(IPath::Path* path, IPath::SearchResult result, int2 startBlock,int2 goalBlock,float goalRadius,int pathType, const CSolidObject *owner);
+	void Merge();
 	CacheItem* GetCachedPath(int2 startBlock,int2 goalBlock,float goalRadius,int pathType);
 	void Update();
 
 	std::map<unsigned int,CacheItem*> cachedPaths;
+	std::map<int, std::vector<CacheItem*> > newCachedPaths;
 
 	struct CacheQue {
 		int timeout;

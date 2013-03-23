@@ -4,6 +4,8 @@
 #define _BASIC_MAP_DAMAGE_H
 
 #include "MapDamage.h"
+#include "System/Misc/RectangleOptimizer.h"
+#include "System/Rectangle.h"
 
 #include <deque>
 #include <vector>
@@ -45,6 +47,7 @@ private:
 	};
 
 	std::deque<Explo*> explosions;
+	CRectangleOptimizer recalcAreas;
 
 	struct RelosSquare {
 		int x;

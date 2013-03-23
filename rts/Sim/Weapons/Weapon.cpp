@@ -582,6 +582,7 @@ bool CWeapon::AttackGround(float3 newTargetPos, bool isUserTarget)
 
 bool CWeapon::AttackUnit(CUnit* newTargetUnit, bool isUserTarget)
 {
+	ASSERT_SINGLETHREADED_SIM();
 	if ((!isUserTarget && weaponDef->noAutoTarget)) {
 		return false;
 	}
@@ -1092,6 +1093,8 @@ bool CWeapon::TryTarget(const float3& tgtPos, bool userTarget, const CUnit* targ
 // (terrain is NOT checked here, HaveFreeLineOfFire does that)
 bool CWeapon::TestTarget(const float3& tgtPos, bool /*userTarget*/, const CUnit* targetUnit) const
 {
+	ASSERT_SINGLETHREADED_SIM();
+
 	if (targetUnit && (targetUnit == owner)) {
 		return false;
 	}

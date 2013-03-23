@@ -183,6 +183,7 @@ void CGameHelper::DoExplosionDamage(
 
 
 void CGameHelper::Explosion(const ExplosionParams& params) {
+	ASSERT_SINGLETHREADED_SIM();
 	const float3& dir = params.dir;
 	const float3 expPos = params.pos;
 	const DamageArray& damages = params.damages;

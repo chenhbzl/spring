@@ -56,6 +56,8 @@ void CModInfo::Init(const char* modArchive)
 
 		pathFinderSystem = system.GetInt("pathFinderSystem", PFS_TYPE_DEFAULT) % PFS_NUM_TYPES;
 		luaThreadingModel = system.GetInt("luaThreadingModel", MT_LUA_SINGLE_BATCH);
+		multiThreadSim = MULTITHREADED_SIM && system.GetBool("multiThreadSim", true);
+		asyncPathFinder = THREADED_PATH && (multiThreadSim || system.GetBool("asyncPathFinder", true));
 
 		if (numThreads == 0) {
 			if (Threading::GetAvailableCores() <= 1     ) disableGML = true;

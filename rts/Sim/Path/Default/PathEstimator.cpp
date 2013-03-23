@@ -19,6 +19,7 @@
 #include "PathLog.h"
 #include "Map/ReadMap.h"
 #include "Game/LoadScreen.h"
+#include "Sim/Misc/ModInfo.h"
 #include "Sim/MoveTypes/MoveDefHandler.h"
 #include "Sim/MoveTypes/MoveMath/MoveMath.h"
 #include "Sim/Units/Unit.h"
@@ -32,6 +33,7 @@
 #include "System/FileSystem/FileSystem.h"
 #include "System/FileSystem/FileQueryFlags.h"
 #include "System/Platform/Watchdog.h"
+#include "System/Platform/SimThreadPool.h"
 
 
 CONFIG(int, MaxPathCostsMemoryFootPrint).defaultValue(512 * 1024 * 1024);
@@ -94,6 +96,11 @@ CPathEstimator::CPathEstimator(CPathFinder* pf, unsigned int BSIZE, const std::s
 CPathEstimator::~CPathEstimator()
 {
 	delete pathCache;
+}
+
+
+void CPathEstimator::MergePathCache() {
+	pathCache->Merge();
 }
 
 
@@ -426,6 +433,40 @@ void CPathEstimator::MapChanged(unsigned int x1, unsigned int z1, unsigned int x
 }
 
 
+
+void CPathEstimator::DoFindOffset(int n) {
+	// copy the next block in line
+	const SingleBlock sb = updateSingleBlocks[n];
+
+	const unsigned int blockX = sb.blockPos.x;
+	const unsigned int blockZ = sb.blockPos.y;
+	const unsigned int blockN = blockZ * nbrOfBlocksX + blockX;
+
+	const MoveDef* currBlockMD = sb.moveDef;
+
+	blockStates.peNodeOffsets[blockN][currBlockMD->pathType] = FindOffset(*currBlockMD, blockX, blockZ);
+}
+
+#define THREADED_FIND_OFFSET 0
+CPathEstimator* curPE = NULL;
+
+void FindOffsetsStatic(bool threaded) {
+	if (!threaded) {
+		Threading::OMPCheck();
+		#pragma omp parallel for
+		for (unsigned int n = 0; n < curPE->NumBlocksToUpdate(); ++n) {
+			curPE->DoFindOffset(n);
+		}
+	} else {
+		while (true) {
+			int nextPos = simThreadPool->NextIter();
+			if (nextPos >= curPE->NumBlocksToUpdate()) break;
+			Threading::SetThreadCurrentObjectID(nextPos);
+			curPE->DoFindOffset(nextPos);
+		}
+	}
+}
+
 /**
  * Update some obsolete blocks using the FIFO-principle
  */
@@ -438,8 +479,7 @@ void CPathEstimator::Update() {
 	const unsigned int progressiveUpdates = updatedBlocks.size() * 0.01f * ((BLOCK_SIZE >= 16)? 1.0f : 0.6f);
 	const unsigned int blocksToUpdate = std::max(BLOCKS_TO_UPDATE, progressiveUpdates);
 
-	std::vector<SingleBlock> v;
-	v.reserve(blocksToUpdate);
+	updateSingleBlocks.reserve(blocksToUpdate);
 
 	// CalculateVertices (not threadsafe)
 	for (unsigned int n = 0; !updatedBlocks.empty() && n < blocksToUpdate; ) {
@@ -450,7 +490,7 @@ void CPathEstimator::Update() {
 		if (blockStates.nodeMask[sb.blockPos.y * nbrOfBlocksX + sb.blockPos.x] & PATHOPT_OBSOLETE) {
 			// no need to check for duplicates, cause FindOffset is deterministic
 			// and so even when we compute it multiple times the result will be the same
-			v.push_back(sb);
+			updateSingleBlocks.push_back(sb);
 
 			// one stale SingleBlock consumed
 			n++;
@@ -462,28 +502,26 @@ void CPathEstimator::Update() {
 	// FindOffset (threadsafe)
 	{
 		SCOPED_TIMER("CPathEstimator::FindOffset");
+#if THREADED_FIND_OFFSET
+		Threading::SetMultiThreadedSim(modInfo.multiThreadSim);
+		curPE = this;
+		simThreadPool->Execute(&FindOffsetsStatic);
+		Threading::SetMultiThreadedSim(false);
+#else
 		Threading::OMPCheck();
 		#pragma omp parallel for
-		for (unsigned int n = 0; n < v.size(); ++n) {
-			// copy the next block in line
-			const SingleBlock sb = v[n];
-
-			const unsigned int blockX = sb.blockPos.x;
-			const unsigned int blockZ = sb.blockPos.y;
-			const unsigned int blockN = blockZ * nbrOfBlocksX + blockX;
-
-			const MoveDef* currBlockMD = sb.moveDef;
-
-			blockStates.peNodeOffsets[blockN][currBlockMD->pathType] = FindOffset(*currBlockMD, blockX, blockZ);
+		for (unsigned int n = 0; n < NumBlocksToUpdate(); ++n) {
+			DoFindOffset(n);
 		}
+#endif
 	}
 
 	// CalculateVertices (not threadsafe)
 	{
 		SCOPED_TIMER("CPathEstimator::CalculateVertices");
-		for (unsigned int n = 0; n < v.size(); ++n) {
+		for (unsigned int n = 0; n < updateSingleBlocks.size(); ++n) {
 			// copy the next block in line
-			const SingleBlock sb = v[n];
+			const SingleBlock sb = updateSingleBlocks[n];
 
 			const unsigned int blockX = sb.blockPos.x;
 			const unsigned int blockZ = sb.blockPos.y;
@@ -504,7 +542,7 @@ void CPathEstimator::Update() {
 		}
 	}
 
-	v.clear();
+	updateSingleBlocks.clear();
 }
 
 
@@ -525,6 +563,7 @@ IPath::SearchResult CPathEstimator::GetPath(
 	const CPathFinderDef& peDef,
 	IPath::Path& path,
 	unsigned int maxSearchedBlocks,
+	const CSolidObject *owner,
 	bool synced
 ) {
 	start.ClampInBounds();
@@ -564,7 +603,7 @@ IPath::SearchResult CPathEstimator::GetPath(
 
 		if (synced && result == IPath::Ok) {
 			// add succesful paths to the cache (NOTE: only when in synced context)
-			pathCache->AddPath(&path, result, startBlock, goalBlock, peDef.sqGoalRadius, moveDef.pathType);
+			pathCache->AddPath(&path, result, startBlock, goalBlock, peDef.sqGoalRadius, moveDef.pathType, owner);
 		}
 
 		if (LOG_IS_ENABLED(L_DEBUG)) {
@@ -678,6 +717,7 @@ IPath::SearchResult CPathEstimator::DoSearch(const MoveDef& moveDef, const CPath
 
 		// mark this block as closed
 		blockStates.nodeMask[ob->nodeNum] |= PATHOPT_CLOSED;
+		dirtyBlocks.push_back(ob->nodeNum);
 	}
 
 	// we found our goal

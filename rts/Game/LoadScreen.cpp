@@ -309,7 +309,7 @@ bool CLoadScreen::Draw()
 		font->SetTextColor(1.0f,1.0f,1.0f,1.0f);
 		if (GML::Enabled()) {
 			font->glFormat(0.5f,0.06f, globalRendering->viewSizeY / 35.0f, FONT_OUTLINE | FONT_CENTER | FONT_NORM,
-				"Spring %s (%d threads)", SpringVersion::GetFull().c_str(), GML::ThreadCount());
+				"Spring %s (%d threads)", SpringVersion::GetFull().c_str(), GML::ThreadCount() + Threading::SimThreadCount() - 1);
 		} else {
 			font->glFormat(0.5f,0.06f, globalRendering->viewSizeY / 35.0f, FONT_OUTLINE | FONT_CENTER | FONT_NORM,
 				"Spring %s", SpringVersion::GetFull().c_str());

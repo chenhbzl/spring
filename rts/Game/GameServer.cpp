@@ -885,7 +885,7 @@ void CGameServer::LagProtection()
 		if (userSpeedFactor <= 2.f)
 			newSpeed = std::max(newSpeed, (curSpeedCtrl == 1) ? userSpeedFactor * 0.8f : userSpeedFactor * 0.5f);
 
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(USE_GML)
 		// adjust game speed to localclient's (:= host) maximum SimFrame rate
 		//FIXME instead of using CpuUsage for connected clients use their avgSimFrameTime or rather maxSimFPS, too (which isn't send via network yet!)
 		const float maxSimFPS = (1000.0f / gu->avgSimFrameTime) * (1.0f - gu->reconnectSimDrawBalance);

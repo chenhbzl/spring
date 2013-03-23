@@ -81,11 +81,13 @@ public:
 		return &(it->second);
 	}
 
-	void CheckUnitCollisions(CProjectile*, std::vector<CUnit*>&, CUnit**, const float3&, const float3&);
-	void CheckFeatureCollisions(CProjectile*, std::vector<CFeature*>&, CFeature**, const float3&, const float3&);
-	void CheckUnitFeatureCollisions(ProjectileContainer&);
-	void CheckGroundCollisions(ProjectileContainer&);
+	void CheckUnitCollisions(CProjectile*, std::vector<CUnit*>&, const float3&, const float3&);
+	void ProjectileCollisionThreadFunc(bool threaded);
+
+	void CheckFeatureCollisions(CProjectile*, std::vector<CFeature*>&, const float3&, const float3&);
 	void CheckCollisions();
+	void CheckCollisionsThreaded(ProjectileContainer &pc, int curPos, int& nextPos);
+	void CheckProjectileCollision(CProjectile *p);
 
 	void SetMaxParticles(int value) { maxParticles = value; }
 	void SetMaxNanoParticles(int value) { maxNanoParticles = value; }

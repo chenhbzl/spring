@@ -6,6 +6,7 @@
 #include "MoveType.h"
 #include "Map/Ground.h"
 #include "Sim/Misc/LosHandler.h"
+#include "Sim/Misc/ModInfo.h"
 #include "Sim/Misc/QuadField.h"
 #include "Sim/Misc/RadarHandler.h"
 #include "Sim/Units/Unit.h"
@@ -39,12 +40,20 @@ AMoveType::AMoveType(CUnit* owner):
 
 	progressState(Done),
 
+#if STABLE_UPDATE
+	stableIsSkidding(false),
+	stableIsFlying(false),
+	stableGoalPos(owner? owner->pos: ZeroVector),
+	stableProgressState(Done),
+#endif
+
 	maxSpeed(owner? owner->unitDef->speed / GAME_SPEED : 0.0f),
 	maxSpeedDef(owner? owner->unitDef->speed / GAME_SPEED : 0.0f),
 	maxWantedSpeed(owner? owner->unitDef->speed / GAME_SPEED : 0.0f),
 
 	repairBelowHealth(0.3f)
 {
+	StableInit(modInfo.asyncPathFinder);
 }
 
 
@@ -68,8 +77,8 @@ void AMoveType::SlowUpdate()
 				owner->radarHeight = owner->losHeight;
 			}
 
-			loshandler->MoveUnit(owner, false);
-			radarhandler->MoveUnit(owner);
+			owner->QueUpdateLOS();
+			owner->QueUpdateRadar();
 
 			if (isAirMoveType) {
 				owner->losHeight = losHeight;
@@ -77,12 +86,13 @@ void AMoveType::SlowUpdate()
 			}
 		}
 
-		quadField->MovedUnit(owner);
+		owner->QueUpdateQuad();
 	}
 }
 
 void AMoveType::KeepPointingTo(CUnit* unit, float distance, bool aggressive)
 {
+	ASSERT_SINGLETHREADED_SIM();
 	KeepPointingTo(float3(unit->pos), distance, aggressive);
 }
 
@@ -91,3 +101,33 @@ void AMoveType::KeepPointingTo(CUnit* unit, float distance, bool aggressive)
 bool AMoveType::WantsRepair() const { return (owner->health      < (repairBelowHealth * owner->maxHealth)); }
 bool AMoveType::WantsRefuel() const { return (owner->currentFuel < (repairBelowHealth * owner->unitDef->maxFuel)); }
 
+#if STABLE_UPDATE
+void AMoveType::StableSlowUpdate() {
+	stableIsSkidding = IsSkidding();
+	stableIsFlying = IsFlying();
+	stableGoalPos = goalPos;
+	stableProgressState = progressState;
+}
+
+void AMoveType::StableUpdate(bool slow) {
+	if (slow)
+		StableSlowUpdate();
+}
+
+void AMoveType::StableInit(bool stable) {
+	if (stable) {
+		pStableIsSkidding = &AMoveType::IsSkiddingStable;
+		pStableIsFlying = &AMoveType::IsFlyingStable;
+		pStableGoalPos = &stableGoalPos;
+		pStableProgressState = &stableProgressState;
+	} else {
+		pStableIsSkidding = &AMoveType::IsSkidding;
+		pStableIsFlying = &AMoveType::IsFlying;
+		pStableGoalPos = &goalPos;
+		pStableProgressState = &progressState;
+	}
+}
+
+bool AMoveType::IsSkiddingStable() const { return stableIsSkidding; }
+bool AMoveType::IsFlyingStable() const { return stableIsFlying; }
+#endif

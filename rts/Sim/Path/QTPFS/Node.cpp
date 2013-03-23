@@ -119,11 +119,12 @@ float3 QTPFS::INode::GetNeighborEdgeTransitionPoint(const INode* ngb, const floa
 	#endif
 
 	switch (GetNeighborRelation(ngb)) {
+		// the (int) stuff due to some MSVC weirdness
 		// corners
-		case REL_NGB_EDGE_T | REL_NGB_EDGE_L: { p.x = xmin() * SQUARE_SIZE; p.z = zmin() * SQUARE_SIZE; } break;
-		case REL_NGB_EDGE_T | REL_NGB_EDGE_R: { p.x = xmax() * SQUARE_SIZE; p.z = zmin() * SQUARE_SIZE; } break;
-		case REL_NGB_EDGE_B | REL_NGB_EDGE_R: { p.x = xmax() * SQUARE_SIZE; p.z = zmax() * SQUARE_SIZE; } break;
-		case REL_NGB_EDGE_B | REL_NGB_EDGE_L: { p.x = xmin() * SQUARE_SIZE; p.z = zmax() * SQUARE_SIZE; } break;
+		case (int)REL_NGB_EDGE_T | REL_NGB_EDGE_L: { p.x = xmin() * SQUARE_SIZE; p.z = zmin() * SQUARE_SIZE; } break;
+		case (int)REL_NGB_EDGE_T | REL_NGB_EDGE_R: { p.x = xmax() * SQUARE_SIZE; p.z = zmin() * SQUARE_SIZE; } break;
+		case (int)REL_NGB_EDGE_B | REL_NGB_EDGE_R: { p.x = xmax() * SQUARE_SIZE; p.z = zmax() * SQUARE_SIZE; } break;
+		case (int)REL_NGB_EDGE_B | REL_NGB_EDGE_L: { p.x = xmin() * SQUARE_SIZE; p.z = zmax() * SQUARE_SIZE; } break;
 
 		#ifdef QTPFS_ORTHOPROJECTED_EDGE_TRANSITIONS
 		#define CAST static_cast<unsigned int>

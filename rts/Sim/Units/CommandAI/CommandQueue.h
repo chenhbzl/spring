@@ -49,12 +49,14 @@ class CCommandQueue {
 
 		inline void pop_back()
 		{
+			ASSERT_SINGLETHREADED_SIM();
 			GML_STDMUTEX_LOCK(cai); // pop_back
 
 			queue.pop_back();
 		}
 		inline void pop_front()
 		{
+			ASSERT_SINGLETHREADED_SIM();
 			GML_STDMUTEX_LOCK(cai); // pop_front
 
 			queue.pop_front();
@@ -128,6 +130,7 @@ inline int CCommandQueue::GetNextTag()
 
 inline void CCommandQueue::push_back(const Command& cmd)
 {
+	ASSERT_SINGLETHREADED_SIM();
 	GML_STDMUTEX_LOCK(cai); // push_back
 
 	queue.push_back(cmd);
@@ -137,6 +140,7 @@ inline void CCommandQueue::push_back(const Command& cmd)
 
 inline void CCommandQueue::push_front(const Command& cmd)
 {
+	ASSERT_SINGLETHREADED_SIM();
 	GML_STDMUTEX_LOCK(cai); // push_front
 
 	queue.push_front(cmd);

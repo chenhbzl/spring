@@ -92,7 +92,7 @@ CHoverAirMoveType::CHoverAirMoveType(CUnit* owner) :
 	accRate = std::max(0.01f, owner->unitDef->maxAcc);
 	decRate = std::max(0.01f, owner->unitDef->maxDec);
 
-	wantedHeight = owner->unitDef->wantedHeight + gs->randFloat() * 5.0f;
+	wantedHeight = owner->unitDef->wantedHeight + gs->randFloat(owner) * 5.0f;
 	orgWantedHeight = wantedHeight;
 	dontLand = owner->unitDef->DontLand();
 	collide = owner->unitDef->collide;
@@ -130,7 +130,7 @@ void CHoverAirMoveType::SetState(AircraftState newState)
 	// Perform cob animation
 	if (aircraftState == AIRCRAFT_LANDED) {
 		assert(newState != AIRCRAFT_LANDING); // redundant SetState() call, we already landed and get command to switch into landing
-		owner->script->StartMoving();
+		owner->QueScriptStartMoving();
 	}
 
 	if (newState == AIRCRAFT_LANDED) {
@@ -150,15 +150,15 @@ void CHoverAirMoveType::SetState(AircraftState newState)
 		case AIRCRAFT_LANDED:
 			//FIXME already inform commandAI in AIRCRAFT_LANDING!
 			//FIXME Problem is StopMove() also calls owner->script->StopMoving() what should only be called when landed. Also see CStrafeAirMoveType::SetState().
-			owner->commandAI->StopMove();
+			owner->QueCAIStopMove();
 			if (padStatus == PAD_STATUS_FLYING) {
 				// set us on ground if we are not on a pad
 				owner->physicalState = CSolidObject::OnGround;
-				owner->Block();
+				owner->QueBlock();
 			}
 			break;
 		case AIRCRAFT_LANDING:
-			owner->Deactivate();
+			owner->QueDeactivate();
 			break;
 		case AIRCRAFT_HOVERING:
 			wantedHeight = orgWantedHeight;
@@ -166,8 +166,8 @@ void CHoverAirMoveType::SetState(AircraftState newState)
 			// fall through
 		default:
 			owner->physicalState = CSolidObject::Flying;
-			owner->UnBlock();
-			owner->Activate();
+			owner->QueUnBlock();
+			owner->QueActivate();
 			reservedLandingPos.x = -1;
 			break;
 	}
@@ -352,8 +352,8 @@ void CHoverAirMoveType::UpdateHovering()
 
 	// random movement (a sort of fake wind effect)
 	// random drift values are in range -0.5 ... 0.5
-	randomWind.x = randomWind.x * 0.9f + (gs->randFloat() - 0.5f) * 0.5f;
-	randomWind.z = randomWind.z * 0.9f + (gs->randFloat() - 0.5f) * 0.5f;
+	randomWind.x = randomWind.x * 0.9f + (gs->randFloat(owner) - 0.5f) * 0.5f;
+	randomWind.z = randomWind.z * 0.9f + (gs->randFloat(owner) - 0.5f) * 0.5f;
 
 	wantedSpeed = owner->speed + deltaDir;
 	wantedSpeed += (randomWind * driftSpeed * 0.5f);
@@ -435,7 +435,7 @@ void CHoverAirMoveType::UpdateFlying()
 						}
 						relPos.y = 0.0f;
 						relPos.Normalize();
-						static CMatrix44f rot(0.0f,fastmath::PI/4.0f,0.0f);
+						CMatrix44f rot(0.0f,fastmath::PI/4.0f,0.0f);
 						float3 newPos = rot.Mul(relPos);
 
 						// Make sure the point is on the circle
@@ -456,10 +456,10 @@ void CHoverAirMoveType::UpdateFlying()
 					relPos.y = 0;
 					relPos.Normalize();
 					CMatrix44f rot;
-					if (gs->randFloat() > 0.5f) {
-						rot.RotateY(0.6f + gs->randFloat() * 0.6f);
+					if (gs->randFloat(owner) > 0.5f) {
+						rot.RotateY(0.6f + gs->randFloat(owner) * 0.6f);
 					} else {
-						rot.RotateY(-(0.6f + gs->randFloat() * 0.6f));
+						rot.RotateY(-(0.6f + gs->randFloat(owner) * 0.6f));
 					}
 					float3 newPos = rot.Mul(relPos);
 					newPos = newPos * goalDistance;
@@ -531,13 +531,13 @@ void CHoverAirMoveType::UpdateLanding()
 			reservedLandingPos = pos;
 			goalPos = pos;
 			owner->physicalState = CSolidObject::OnGround;
-			owner->Block();
+			owner->QueBlock();
 			owner->physicalState = CSolidObject::Flying;
-			owner->Deactivate();
-			owner->script->StopMoving();
+			owner->QueDeactivate();
+			owner->QueScriptStopMoving();
 		} else {
 			if (goalPos.SqDistance2D(pos) < 900) {
-				goalPos = goalPos + gs->randVector() * 300;
+				goalPos = goalPos + gs->randVector(owner) * 300;
 				goalPos.ClampInBounds();
 				progressState = AMoveType::Failed; // exact landing pos failed, make sure finishcommand is called anyway
 			}
@@ -738,11 +738,11 @@ void CHoverAirMoveType::UpdateAirPhysics()
 	curRelHeight = pos.y - curAbsHeight;
 
 	if (lastColWarningType == 2) {
-		const float3 dir = lastColWarning->midPos - owner->midPos;
-		const float3 sdir = lastColWarning->speed - speed;
+		const float3 dir = lastColWarning->StableMidPos() - owner->midPos;
+		const float3 sdir = lastColWarning->StableSpeed() - speed;
 
 		if (speed.dot(dir + sdir * 20.0f) < 0.0f) {
-			if (lastColWarning->midPos.y > owner->pos.y) {
+			if (lastColWarning->StableMidPos().y > owner->pos.y) {
 				wh -= 30.0f;
 			} else {
 				wh += 50.0f;
@@ -801,7 +801,7 @@ void CHoverAirMoveType::UpdateMoveRate()
 	}
 
 	if (curRate != lastMoveRate) {
-		owner->script->MoveRate(curRate);
+		owner->QueScriptMoveRate(curRate);
 		lastMoveRate = curRate;
 	}
 }
@@ -889,7 +889,7 @@ bool CHoverAirMoveType::Update()
 
 			if ((ground->GetHeightAboveWater(owner->pos.x, owner->pos.z) + 5.0f + owner->radius) > owner->pos.y) {
 				owner->SetCrashing(false);
-				owner->KillUnit(NULL, true, false);
+				owner->QueKillUnit(true);
 			} else {
 				#define SPIN_DIR(o) ((o->id & 1) * 2 - 1)
 				wantedHeading = GetHeadingFromVector(owner->rightdir.x * SPIN_DIR(owner), owner->rightdir.z * SPIN_DIR(owner));
@@ -897,7 +897,7 @@ bool CHoverAirMoveType::Update()
 				#undef SPIN_DIR
 			}
 
-			new CSmokeProjectile(owner->midPos, gs->randVector() * 0.08f, 100 + gs->randFloat() * 50, 5, 0.2f, owner, 0.4f);
+			owner->QueSmokeProjectile();
 		} break;
 	}
 
@@ -921,11 +921,7 @@ void CHoverAirMoveType::SlowUpdate()
 	// but only MobileCAI's reserve pads so we need to do
 	// this for ourselves
 	if (reservedPad == NULL && aircraftState == AIRCRAFT_FLYING && WantsRepair()) {
-		CAirBaseHandler::LandingPad* lp = airBaseHandler->FindAirBase(owner, owner->unitDef->minAirBasePower, true);
-
-		if (lp != NULL) {
-			AAirMoveType::ReservePad(lp);
-		}
+		owner->QueFindPad();
 	}
 
 	UpdateMoveRate();
@@ -1011,44 +1007,44 @@ bool CHoverAirMoveType::HandleCollisions()
 		bool hitBuilding = false;
 
 		if (!loadingUnits && checkCollisions) {
-			const vector<CUnit*>& nearUnits = quadField->GetUnitsExact(pos, owner->radius + 6);
+			const std::vector<CUnit*>& nearUnits = quadField->StableGetUnitsExact(pos, owner->radius + 6);
 
-			for (vector<CUnit*>::const_iterator ui = nearUnits.begin(); ui != nearUnits.end(); ++ui) {
+			for (std::vector<CUnit*>::const_iterator ui = nearUnits.begin(); ui != nearUnits.end(); ++ui) {
 				CUnit* unit = *ui;
 
-				if (unit->transporter != NULL)
+				if (unit->StableTransporter() != NULL) // PROBLEM
 					continue;
 
-				const float sqDist = (pos - unit->pos).SqLength();
-				const float totRad = owner->radius + unit->radius;
+				const float sqDist = (pos - unit->StablePos()).SqLength();
+				const float totRad = owner->radius + unit->StableRadius();
 
 				if (sqDist <= 0.1f || sqDist >= (totRad * totRad))
 					continue;
 
 				const float dist = math::sqrt(sqDist);
-				const float3 dif = (pos - unit->pos).Normalize();
+				const float3 dif = (pos - unit->StablePos()).Normalize();
 
-				if (unit->mass >= CSolidObject::DEFAULT_MASS || unit->immobile) {
+				if (unit->StableMass() >= CSolidObject::DEFAULT_MASS || unit->StableImmobile()) {
 					owner->Move3D(-dif * (dist - totRad), true);
 					owner->speed *= 0.99f;
 
 					hitBuilding = true;
 				} else {
-					const float part = owner->mass / (owner->mass + unit->mass);
+					const float part = owner->mass / (owner->mass + unit->StableMass());
 
 					owner->Move3D(-dif * (dist - totRad) * (1.0f - part), true);
-					unit->Move3D(dif * (dist - totRad) * (part), true);
+					owner->QueMoveUnit(unit, dif * (dist - totRad) * (part), true, false);
 
-					const float colSpeed = -owner->speed.dot(dif) + unit->speed.dot(dif);
+					const float colSpeed = -owner->speed.dot(dif) + unit->StableSpeed().dot(dif);
 
 					owner->speed += (dif * colSpeed * (1.0f - part));
-					unit->speed -= (dif * colSpeed * (part));
+					owner->QueChangeSpeed(unit, -(dif * colSpeed * (part)), 1.0f);
 				}
 			}
 		}
 
 		if (hitBuilding && owner->IsCrashing()) {
-			owner->KillUnit(NULL, true, false);
+			owner->QueKillUnit(true);
 			return true;
 		}
 

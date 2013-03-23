@@ -5,6 +5,10 @@
 #include "System/creg/STL_Set.h"
 #include "System/Log/ILog.h"
 #include "System/Platform/CrashHandler.h"
+#if MULTITHREADED_SIM
+#include "System/Platform/Synchro.h"
+Threading::Mutex depMutex;
+#endif
 
 
 CR_BIND(CObject, )
@@ -41,6 +45,7 @@ CObject::CObject() : detached(false)
 
 void CObject::Detach()
 {
+	ASSERT_SINGLETHREADED_SIM();
 	// SYNCED
 	assert(!detached);
 	detached = true;
@@ -140,6 +145,9 @@ void CObject::DependentDied(CObject* obj)
 // and preferably try to delete the dependence asap in order not to waste memory
 void CObject::AddDeathDependence(CObject* obj, DependenceType dep)
 {
+#if MULTITHREADED_SIM
+	Threading::ScopedLock depLock(depMutex, Threading::multiThreadedSim); // AddDeathDependence
+#endif
 	assert(!detached);
 	listening[dep].insert(obj);
 
@@ -149,6 +157,9 @@ void CObject::AddDeathDependence(CObject* obj, DependenceType dep)
 
 void CObject::DeleteDeathDependence(CObject* obj, DependenceType dep)
 {
+#if MULTITHREADED_SIM
+	Threading::ScopedLock depLock(depMutex, Threading::multiThreadedSim); // DeleteDeathDependence
+#endif
 	assert(!detached);
 	obj->listeners[dep].erase(this);
 

@@ -70,8 +70,12 @@ CFeature::CFeature() : CSolidObject(),
 	udef(NULL),
 
 	myFire(NULL),
+#if STABLE_UPDATE
+	// stable variables shall be inited hére
+#endif
 	solidOnTop(NULL)
 {
+	StableInit(modInfo.asyncPathFinder);
 	crushable = true;
 	immobile = true;
 
@@ -81,7 +85,7 @@ CFeature::CFeature() : CSolidObject(),
 CFeature::~CFeature()
 {
 	if (blocking) {
-		UnBlock();
+		QueUnBlock();
 	}
 
 	quadField->RemoveFeature(this);
@@ -190,8 +194,9 @@ void CFeature::Initialize(const FeatureLoadParams& params)
 	// maybe should not be here, but it prevents crashes caused by team = -1
 	ChangeTeam(team);
 
+	StableUpdate(true);
 	if (blocking) {
-		Block();
+		QueBlock();
 	}
 
 	if (def->floating) {
@@ -349,6 +354,7 @@ bool CFeature::AddBuildPower(float amount, CUnit* builder)
 
 void CFeature::DoDamage(const DamageArray& damages, const float3& impulse, CUnit*, int, int)
 {
+	ASSERT_SINGLETHREADED_SIM();
 	if (damages.paralyzeDamageTime) {
 		return; // paralyzers do not damage features
 	}
@@ -391,7 +397,7 @@ void CFeature::DependentDied(CObject *o)
 void CFeature::ForcedMove(const float3& newPos)
 {
 	if (blocking) {
-		UnBlock();
+		QueUnBlock();
 	}
 
 	// remove from managers
@@ -409,7 +415,7 @@ void CFeature::ForcedMove(const float3& newPos)
 	quadField->AddFeature(this);
 
 	if (blocking) {
-		Block();
+		QueBlock();
 	}
 }
 
@@ -450,7 +456,7 @@ bool CFeature::UpdatePosition()
 			speed *= (1.0f - (int(reachedGround) * 0.10f));
 
 			if (speed.SqLength2D() > 0.01f) {
-				UnBlock();
+				QueUnBlock();
 				quadField->RemoveFeature(this);
 
 				// update our forward speed (and quadfield
@@ -458,7 +464,7 @@ bool CFeature::UpdatePosition()
 				Move3D(speed, true);
 
 				quadField->AddFeature(this);
-				Block();
+				QueBlock();
 			} else {
 				speed.x = 0.0f;
 				speed.z = 0.0f;
@@ -652,3 +658,52 @@ float CFeature::RemainingMetal() const { return RemainingResource(def->metal); }
 float CFeature::RemainingEnergy() const { return RemainingResource(def->energy); }
 int CFeature::ChunkNumber(float f) const { return int(math::ceil(f * modInfo.reclaimMethod)); }
 
+void CFeature::QueBlock(bool delay) {
+	if (delay) {
+		delayOps.push_back(DelayOp(BLOCK));
+		featureHandler->SetFeatureBlockChanged(this);
+	} else {
+		Block();
+	}
+}
+void CFeature::QueUnBlock(bool delay) {
+	if (delay) {
+		delayOps.push_back(DelayOp(UNBLOCK));
+		featureHandler->SetFeatureBlockChanged(this);
+	} else {
+		UnBlock();
+	}
+}
+
+void CFeature::ExecuteDelayOps() {
+	while (!delayOps.empty()) {
+		const DelayOp d = delayOps.front(); // NOTE: No reference here since any of the calls below may add new delay ops at the end of the deque
+		switch (d.type) {
+			case BLOCK:
+				QueBlock(false);
+				break;
+			case UNBLOCK:
+				QueUnBlock(false);
+				break;
+			default:
+				LOG_L(L_ERROR, "Unknown delay operation: %d", d.type);
+		}
+		delayOps.pop_front();
+	}
+}
+
+#if STABLE_UPDATE
+void CFeature::StableSlowUpdate() {
+	CSolidObject::StableSlowUpdate();
+}
+
+void CFeature::StableUpdate(bool slow) {
+	if (slow)
+		StableSlowUpdate();
+	CSolidObject::StableUpdate(slow);
+}
+
+void CFeature::StableInit(bool stable) {
+	CSolidObject::StableInit(stable);
+}
+#endif

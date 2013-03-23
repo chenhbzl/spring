@@ -60,8 +60,8 @@ void ProfileDrawer::Draw()
 	int y = 0;
 	font->Begin();
 	for (pi = profiler.profile.begin(); pi != profiler.profile.end(); ++pi, ++y) {
-#if GML_MUTEX_PROFILER
-		const float fStartY = start_y - y * 0.018f;
+#if GML_MUTEX_PROFILER || 1
+		const float fStartY = start_y - y * 0.014f;
 #else
 		const float fStartY = start_y - y * 0.024f;
 #endif

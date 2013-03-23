@@ -8,6 +8,7 @@
 #include "Map/ReadMap.h"
 #include "Sim/Misc/CollisionVolume.h"
 #include "Sim/Misc/QuadField.h"
+#include "Sim/Path/IPathManager.h"
 #include "Sim/Units/CommandAI/BuilderCAI.h"
 #include "System/creg/STL_List.h"
 #include "System/EventHandler.h"
@@ -428,6 +429,15 @@ CFeature* CFeatureHandler::CreateWreckage(
 }
 
 
+void CFeatureHandler::ExecuteBlockOps() {
+	if (modInfo.asyncPathFinder) {
+		for (CFeatureSet::iterator i = blockFeatures.begin(); i != blockFeatures.end(); ++i) {
+			(*i)->ExecuteDelayOps();
+		}
+		blockFeatures.clear();
+	}
+}
+
 
 void CFeatureHandler::Update()
 {
@@ -448,10 +458,16 @@ void CFeatureHandler::Update()
 		}
 	}
 
+	if (toBeRemoved.empty() && !blockFeatures.empty()) {
+		IPathManager::ScopedDisableThreading sdt;
+		ExecuteBlockOps();
+	}
 	{
 		GML_STDMUTEX_LOCK(rfeat); // Update
 
 		if (!toBeRemoved.empty()) {
+			IPathManager::ScopedDisableThreading sdt;
+			ExecuteBlockOps();
 
 			GML_RECMUTEX_LOCK(obj); // Update
 			eventHandler.DeleteSyncedObjects();
@@ -466,6 +482,7 @@ void CFeatureHandler::Update()
 				toBeRemoved.pop_back();
 
 				if (feature) {
+					feature->ExecuteDelayOps();
 					toBeFreedFeatureIDs.push_back(feature->id);
 					activeFeatures.erase(feature);
 					features[feature->id] = NULL;
@@ -497,6 +514,10 @@ void CFeatureHandler::Update()
 	}
 }
 
+void CFeatureHandler::SetFeatureBlockChanged(CFeature* feature)
+{
+	blockFeatures.insert(feature);
+}
 
 void CFeatureHandler::SetFeatureUpdateable(CFeature* feature)
 {

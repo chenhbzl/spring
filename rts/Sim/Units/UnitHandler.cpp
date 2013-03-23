@@ -11,9 +11,12 @@
 #include "Sim/Misc/AirBaseHandler.h"
 #include "Sim/Misc/TeamHandler.h"
 #include "Sim/MoveTypes/MoveType.h"
+#include "Sim/Path/IPathManager.h"
+#include "System/Config/ConfigHandler.h"
 #include "System/EventHandler.h"
 #include "System/EventBatchHandler.h"
 #include "System/Log/ILog.h"
+#include "System/Platform/SimThreadPool.h"
 #include "System/TimeProfiler.h"
 #include "System/myMath.h"
 #include "System/Sync/SyncTracer.h"
@@ -21,12 +24,21 @@
 #include "System/creg/STL_List.h"
 #include "System/creg/STL_Set.h"
 
+#if defined(DEBUG) && defined(HEADLESS) // assume validation test
+CONFIG(int, SimThreadCount).defaultValue(3).safemodeValue(3).minimumValue(3).maximumValue(3);
+#else
+CONFIG(int, SimThreadCount).defaultValue(0).safemodeValue(1).minimumValue(0).maximumValue(GML_MAX_NUM_THREADS);
+#endif
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
 
 CUnitHandler* unitHandler = NULL;
+static void UpdateMoveTypeThreadFuncStatic(bool threaded) { unitHandler->UpdateMoveTypeThreadFunc(threaded); }
+static void SlowUpdateMoveTypeInitThreadFuncStatic(bool threaded) { unitHandler->SlowUpdateMoveTypeInitThreadFunc(threaded); }
+static void SlowUpdateMoveTypeThreadFuncStatic(bool threaded) { unitHandler->SlowUpdateMoveTypeThreadFunc(threaded); }
+static void DelayedSlowUpdateMoveTypeThreadFuncStatic(bool threaded) { unitHandler->DelayedSlowUpdateMoveTypeThreadFunc(threaded); }
 
 CR_BIND(CUnitHandler, );
 CR_REG_METADATA(CUnitHandler, (
@@ -75,11 +87,13 @@ CUnitHandler::CUnitHandler()
 
 	activeSlowUpdateUnit = activeUnits.end();
 	airBaseHandler = new CAirBaseHandler();
+	simThreadPool = new CSimThreadPool();
 }
 
 
 CUnitHandler::~CUnitHandler()
 {
+	delete simThreadPool;
 	for (std::list<CUnit*>::iterator usi = activeUnits.begin(); usi != activeUnits.end(); ++usi) {
 		// ~CUnit dereferences featureHandler which is destroyed already
 		(*usi)->delayedWreckLevel = -1;
@@ -136,6 +150,7 @@ void CUnitHandler::DeleteUnit(CUnit* unit)
 
 void CUnitHandler::DeleteUnitNow(CUnit* delUnit)
 {
+	delUnit->ExecuteDelayOps();
 	int delTeam = 0;
 	int delType = 0;
 
@@ -179,11 +194,24 @@ void CUnitHandler::DeleteUnitNow(CUnit* delUnit)
 #endif
 }
 
-
 void CUnitHandler::Update()
 {
+	static int nBlockOps = 0;
 	{
 		GML_STDMUTEX_LOCK(runit); // Update
+
+		IPathManager::ScopedDisableThreading sdt;
+		{
+			SCOPED_TIMER("Unit::MoveType::Update");
+
+			for (int i = 0; i < nBlockOps; ++i) {
+				int id = blockOps[i];
+				(id > 0) ? units[id - 1]->Block() : units[-id - 1]->UnBlock();
+			}
+			if (modInfo.multiThreadSim)
+				pathManager->MergePathCaches();
+			CSolidObject::UpdateStableData();
+		}
 
 		if (!unitsToBeRemoved.empty()) {
 			GML_RECMUTEX_LOCK(obj); // Update
@@ -236,24 +264,26 @@ void CUnitHandler::Update()
 
 	{
 		SCOPED_TIMER("Unit::MoveType::Update");
-		std::list<CUnit*>::iterator usi;
-		for (usi = activeUnits.begin(); usi != activeUnits.end(); ++usi) {
-			CUnit* unit = *usi;
-			AMoveType* moveType = unit->moveType;
 
-			UNIT_SANITY_CHECK(unit);
+		Threading::SetMultiThreadedSim(modInfo.multiThreadSim);
+		Threading::SetThreadedPath(modInfo.asyncPathFinder);
+		if (Threading::threadedPath)
+			pathManager->Update(1);
+		simThreadPool->Execute(&UpdateMoveTypeThreadFuncStatic);
+		Threading::SetMultiThreadedSim(false);
 
-			if (moveType->Update()) {
-				eventHandler.UnitMoved(unit);
+		if (modInfo.asyncPathFinder) {
+			nBlockOps = 0;
+			// threaded pathing can run also during ExecuteDelayOps, since Block/UnBlock is further delayed
+			for (std::list<CUnit*>::iterator i = activeUnits.begin(); i != activeUnits.end(); ++i) {
+				CUnit* u = *i;
+				if (!u->delayOps.empty()) {
+					int block = u->ExecuteDelayOps(); // can generate new delay ops, but it will execute these also
+					if (block) {
+						blockOps[nBlockOps++] = block ? u->id + 1 : -(u->id + 1);
+					}
+				}
 			}
-			if (!unit->pos.IsInBounds() && (unit->speed.SqLength() > (MAX_UNIT_SPEED * MAX_UNIT_SPEED))) {
-				// this unit is not coming back, kill it now without any death
-				// sequence (so deathScriptFinished becomes true immediately)
-				unit->KillUnit(NULL, false, true, false);
-			}
-
-			UNIT_SANITY_CHECK(unit);
-			GML::GetTicks(unit->lastUnitUpdate);
 		}
 	}
 
@@ -281,6 +311,17 @@ void CUnitHandler::Update()
 		}
 	}
 
+
+	{
+		SCOPED_TIMER("Unit::MoveType::SlowUpdate");
+
+		Threading::SetMultiThreadedSim(modInfo.multiThreadSim);
+		simThreadPool->Execute(&SlowUpdateMoveTypeThreadFuncStatic, &SlowUpdateMoveTypeInitThreadFuncStatic);
+
+		Threading::SetMultiThreadedSim(false);
+		simThreadPool->Execute(&DelayedSlowUpdateMoveTypeThreadFuncStatic);
+	}
+
 	{
 		SCOPED_TIMER("Unit::SlowUpdate");
 
@@ -301,6 +342,126 @@ void CUnitHandler::Update()
 
 			n--;
 		}
+	}
+}
+
+
+inline void UpdateMoveType(CUnit *unit) {
+	Threading::SetThreadCurrentObjectID(unit->id);
+	UNIT_SANITY_CHECK(unit);
+
+	if (unit->moveType->Update())
+		unit->QueMove();
+	if (!unit->pos.IsInBounds() && (unit->speed.SqLength() > (MAX_UNIT_SPEED * MAX_UNIT_SPEED))) {
+		// this unit is not coming back, kill it now without any death
+		// sequence (so deathScriptFinished becomes true immediately)
+		unit->QueKillUnit(false);
+	}
+
+	UNIT_SANITY_CHECK(unit);
+	GML::GetTicks(unit->lastUnitUpdate);
+}
+
+
+void CUnitHandler::UpdateMoveTypeThreadFunc(bool threaded) {
+	std::list<CUnit*>::iterator usi = activeUnits.begin();
+	if (!threaded) {
+		for (; usi != activeUnits.end(); ++usi)
+			UpdateMoveType(*usi);
+		return;
+	}
+	// (threaded)
+	int curPos = 0;
+	const int countEnd = activeUnits.size();
+	while (true) {
+		int nextPos = simThreadPool->NextIter();
+		if (nextPos >= countEnd) break;
+		while(curPos < nextPos) { ++usi; ++curPos; }
+		UpdateMoveType(*usi);
+	}
+}
+
+void CUnitHandler::SlowUpdateMoveTypeInitThreadFunc(bool threaded) {
+	if (!modInfo.multiThreadSim)
+		return; // not needed for singlethreaded sim
+	// (threaded or not)
+	memset(CUnit::updateOps, 0, sizeof(CUnit::updateOps));
+}
+
+void CUnitHandler::SlowUpdateMoveTypeThreadFunc(bool threaded) {
+	std::list<CUnit*>::iterator sui = ((gs->frameNum & (UNIT_SLOWUPDATE_RATE - 1)) == 0) ? activeUnits.begin() : activeSlowUpdateUnit;
+	int curPos = 0;
+	const int countEnd = (activeUnits.size() / UNIT_SLOWUPDATE_RATE) + 1;
+	if (!threaded) {
+		for (; sui != activeUnits.end() && curPos < countEnd; ++sui, ++curPos) {
+			CUnit *unit = *sui;
+			Threading::SetThreadCurrentObjectID(unit->id);
+			unit->moveType->SlowUpdate();
+		}
+		return;
+	}
+	// (threaded)
+	while (true) {
+		int nextPos = simThreadPool->NextIter();
+		if (nextPos >= countEnd) break;
+		while(curPos < nextPos && sui != activeUnits.end()) { ++sui; ++curPos; }
+		if (sui == activeUnits.end()) break;
+		CUnit *unit = *sui;
+		Threading::SetThreadCurrentObjectID(unit->id);
+		unit->moveType->SlowUpdate();
+	}
+}
+
+inline void CUnitHandler::DelayedSlowUpdateMoveTypePart(int pos) {
+	Threading::SetThreadCurrentObjectID(pos);
+	switch(pos) {
+		case 0:
+			for (int i = 0; i < MAX_UNITS; ++i) {
+				if (CUnit::updateOps[i] & CUnit::UPDATE_LOS) {
+					units[i]->QueUpdateLOS(false);
+				}
+			}
+			break;
+		case 1:
+			for (int i = 0; i < MAX_UNITS; ++i) {
+				if (CUnit::updateOps[i] & CUnit::UPDATE_RADAR) {
+					units[i]->QueUpdateRadar(false);
+				}
+			}
+			break;
+		case 2:
+			for (int i = 0; i < MAX_UNITS; ++i) {
+				if (CUnit::updateOps[i] & CUnit::UPDATE_QUAD) {
+					units[i]->QueUpdateQuad(false);
+				}
+			}
+			break;
+		case 3:
+			for (int i = 0; i < MAX_UNITS; ++i) {
+				if (CUnit::updateOps[i] & CUnit::FIND_PAD) {
+					units[i]->QueFindPad(false);
+				}
+			}
+			break;
+		default:
+			LOG_L(L_ERROR, "Invalid slow update type");
+	}
+}
+
+void CUnitHandler::DelayedSlowUpdateMoveTypeThreadFunc(bool threaded) {
+	if (!modInfo.multiThreadSim)
+		return; // not needed for singlethreaded sim
+	// (threaded)
+	const int countEnd = 4;
+	if (!threaded) {
+		for (int pos = 0; pos < countEnd; ++pos)
+			DelayedSlowUpdateMoveTypePart(pos);
+		return;
+	}
+	while (true) {
+		int nextPos = simThreadPool->NextIter();
+		if (nextPos >= countEnd) break;
+		DelayedSlowUpdateMoveTypePart(nextPos);
 	}
 }
 

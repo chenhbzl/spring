@@ -6,6 +6,7 @@
 #include <string>
 #include <sstream>
 #include <algorithm>
+#include <climits> // for UINT_MAX
 #include <boost/utility.hpp>
 
 #include "System/maindefines.h"
@@ -90,6 +91,14 @@ void StringTrimInPlace(std::string& str);
 /// Removes leading and trailing whitespace from a string, in a copy.
 std::string StringTrim(const std::string& str);
 
+static inline bool StringCaseCmp(const char* s1, const char* s2, unsigned int len = UINT_MAX) {
+	unsigned int i;
+	for (i = 0; (*s1 != '\0') && (*s2 != '\0') && i < len; ++i, ++s1, ++s2) {
+		if (tolower(*s1) != tolower(*s2))
+			return false;
+	}
+	return (i == len) || ((*s1 == '\0') && (*s2 == '\0'));
+}
 
 static inline std::string IntToString(int i, const std::string& format = "%i")
 {

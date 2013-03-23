@@ -113,7 +113,7 @@ CStrafeAirMoveType::CStrafeAirMoveType(CUnit* owner):
 	turnRadius = owner->unitDef->turnRadius;
 	wantedHeight =
 		(owner->unitDef->wantedHeight * 1.5f) +
-		((gs->randFloat() - 0.3f) * 15.0f * (isFighter? 2.0f: 1.0f));
+		((gs->randFloat(owner) - 0.3f) * 15.0f * (isFighter? 2.0f: 1.0f));
 
 	// same as {Ground, HoverAir}MoveType::accRate
 	maxAcc = owner->unitDef->maxAcc;
@@ -124,24 +124,24 @@ CStrafeAirMoveType::CStrafeAirMoveType(CUnit* owner):
 	useSmoothMesh = owner->unitDef->useSmoothMesh;
 
 	// FIXME: WHY ARE THESE RANDOMIZED?
-	maxRudder   *= (0.99f + gs->randFloat() * 0.02f);
-	maxElevator *= (0.99f + gs->randFloat() * 0.02f);
-	maxAileron  *= (0.99f + gs->randFloat() * 0.02f);
-	maxAcc      *= (0.99f + gs->randFloat() * 0.02f);
+	maxRudder   *= (0.99f + gs->randFloat(owner) * 0.02f);
+	maxElevator *= (0.99f + gs->randFloat(owner) * 0.02f);
+	maxAileron  *= (0.99f + gs->randFloat(owner) * 0.02f);
+	maxAcc      *= (0.99f + gs->randFloat(owner) * 0.02f);
 
-	crashAileron = 1 - gs->randFloat() * gs->randFloat();
-	if (gs->randInt() & 1) {
+	crashAileron = 1 - gs->randFloat(owner) * gs->randFloat(owner);
+	if (gs->randInt(owner) & 1) {
 		crashAileron = -crashAileron;
 	}
-	crashElevator = gs->randFloat();
-	crashRudder = gs->randFloat() - 0.5f;
+	crashElevator = gs->randFloat(owner);
+	crashRudder = gs->randFloat(owner) - 0.5f;
 
 	lastRudderUpdate = gs->frameNum;
 	lastElevatorPos = 0;
 	lastRudderPos = 0;
 	lastAileronPos = 0;
 
-	exitVector = gs->randVector();
+	exitVector = gs->randVector(owner);
 	exitVector.y = math::fabs(exitVector.y);
 	exitVector.y += 1.0f;
 }
@@ -213,13 +213,13 @@ bool CStrafeAirMoveType::Update()
 
 			const CCommandQueue& cmdQue = owner->commandAI->commandQue;
 			const bool isAttacking = (!cmdQue.empty() && (cmdQue.front()).GetID() == CMD_ATTACK);
-			const bool keepAttacking = ((owner->attackTarget != NULL && !owner->attackTarget->isDead) || owner->userAttackGround);
+			const bool keepAttacking = ((owner->attackTarget != NULL && !owner->attackTarget->StableIsDead()) || owner->userAttackGround);
 
 			if (isAttacking && allowAttack && keepAttacking) {
 				inefficientAttackTime = std::min(inefficientAttackTime, float(gs->frameNum) - owner->lastFireWeapon);
 
 				if (owner->attackTarget != NULL) {
-					goalPos = owner->attackTarget->pos;
+					goalPos = owner->attackTarget->StablePos();
 				} else {
 					goalPos = owner->attackPos;
 				}
@@ -253,10 +253,10 @@ bool CStrafeAirMoveType::Update()
 
 			if ((ground->GetHeightAboveWater(owner->pos.x, owner->pos.z) + 5.0f + owner->radius) > owner->pos.y) {
 				owner->SetCrashing(false);
-				owner->KillUnit(NULL, true, false);
+				owner->QueKillUnit(true);
 			}
 
-			new CSmokeProjectile(owner->midPos, gs->randVector() * 0.08f, 100 + gs->randFloat() * 50, 5, 0.2f, owner, 0.4f);
+			owner->QueSmokeProjectile();
 		} break;
 		case AIRCRAFT_TAKEOFF:
 			UpdateTakeOff(wantedHeight);
@@ -276,11 +276,11 @@ bool CStrafeAirMoveType::HandleCollisions() {
 
 #ifdef DEBUG_AIRCRAFT
 	if (lastColWarningType == 1) {
-		const int g = geometricObjects->AddLine(pos, lastColWarning->pos, 10, 1, 1);
+		const int g = geometricObjects->AddLine(pos, lastColWarning->StablePos(), 10, 1, 1);
 		geometricObjects->SetColor(g, 0.2f, 1, 0.2f, 0.6f);
 	} else if (lastColWarningType == 2) {
-		const int g = geometricObjects->AddLine(pos, lastColWarning->pos, 10, 1, 1);
-		if (owner->frontdir.dot(lastColWarning->midPos + lastColWarning->speed * 20 - owner->midPos - owner->speed * 20) < 0) {
+		const int g = geometricObjects->AddLine(pos, lastColWarning->StablePos(), 10, 1, 1);
+		if (owner->frontdir.dot(lastColWarning->StableMidPos() + lastColWarning->StableSpeed() * 20 - owner->midPos - owner->speed * 20) < 0) {
 			geometricObjects->SetColor(g, 1, 0.2f, 0.2f, 0.6f);
 		} else {
 			geometricObjects->SetColor(g, 1, 1, 0.2f, 0.6f);
@@ -296,40 +296,40 @@ bool CStrafeAirMoveType::HandleCollisions() {
 		bool hitBuilding = false;
 
 		if (checkCollisions) {
-			const vector<CUnit*>& nearUnits = quadField->GetUnitsExact(pos, owner->radius + 6);
+			const std::vector<CUnit*>& nearUnits = quadField->StableGetUnitsExact(pos, owner->radius + 6);
 
-			for (vector<CUnit*>::const_iterator ui = nearUnits.begin(); ui != nearUnits.end(); ++ui) {
+			for (std::vector<CUnit*>::const_iterator ui = nearUnits.begin(); ui != nearUnits.end(); ++ui) {
 				CUnit* unit = *ui;
 
-				const float sqDist = (pos - unit->pos).SqLength();
-				const float totRad = owner->radius + unit->radius;
+				const float sqDist = (pos - unit->StablePos()).SqLength();
+				const float totRad = owner->radius + unit->StableRadius();
 
 				if (sqDist <= 0.1f || sqDist >= (totRad * totRad))
 					continue;
 
 				const float dist = math::sqrt(sqDist);
-				const float3 dif = (pos - unit->pos).Normalize();
+				const float3 dif = (pos - unit->StablePos()).Normalize();
 
-				if (unit->immobile) {
+				if (unit->StableImmobile()) {
 					owner->Move3D(-dif * (dist - totRad), true);
 					owner->speed *= 0.99f;
 
-					const float damage = ((unit->speed - owner->speed) * 0.1f).SqLength();
+					const float damage = ((unit->StableSpeed() - owner->speed) * 0.1f).SqLength();
 
-					owner->DoDamage(DamageArray(damage), ZeroVector, NULL, -CSolidObject::DAMAGE_COLLISION_OBJECT, -1);
-					unit->DoDamage(DamageArray(damage), ZeroVector, NULL, -CSolidObject::DAMAGE_COLLISION_OBJECT, -1);
+					owner->QueDoDamage(owner, damage, ZeroVector, -CSolidObject::DAMAGE_COLLISION_OBJECT);
+					owner->QueDoDamage(unit, damage, ZeroVector, -CSolidObject::DAMAGE_COLLISION_OBJECT);
 
 					hitBuilding = true;
 				} else {
-					const float part = owner->mass / (owner->mass + unit->mass);
+					const float part = owner->mass / (owner->mass + unit->StableMass());
 
 					owner->Move3D(-dif * (dist - totRad) * (1 - part), true);
-					unit->Move3D(dif * (dist - totRad) * (part), true);
+					owner->QueMoveUnit(unit, dif * (dist - totRad) * (part), true, false);
 
-					const float damage = ((unit->speed - owner->speed) * 0.1f).SqLength();
+					const float damage = ((unit->StableSpeed() - owner->speed) * 0.1f).SqLength();
 
-					owner->DoDamage(DamageArray(damage), ZeroVector, NULL, -CSolidObject::DAMAGE_COLLISION_OBJECT, -1);
-					unit->DoDamage(DamageArray(damage), ZeroVector, NULL, -CSolidObject::DAMAGE_COLLISION_OBJECT, -1);
+					owner->QueDoDamage(owner, damage, ZeroVector, -CSolidObject::DAMAGE_COLLISION_OBJECT);
+					owner->QueDoDamage(unit, damage, ZeroVector, -CSolidObject::DAMAGE_COLLISION_OBJECT);
 
 					owner->speed *= 0.99f;
 				}
@@ -340,7 +340,7 @@ bool CStrafeAirMoveType::HandleCollisions() {
 			// if crashing and we hit a building, die right now
 			// rather than waiting until we are close enough to
 			// the ground
-			owner->KillUnit(NULL, true, false);
+			owner->QueKillUnit(true);
 			return true;
 		}
 
@@ -495,7 +495,7 @@ void CStrafeAirMoveType::UpdateFighterAttack()
 			if (frontdir.dot(goalPos - pos) < owner->maxRange * (hasFired ? 1.0f : 0.7f))
 				maneuver = 1;
 		} else if (frontdir.dot(goalPos - pos) < owner->maxRange * 0.7f) {
-			goalPos += exitVector * ((owner->attackTarget != NULL) ? owner->attackTarget->radius + owner->radius + 10 : owner->radius + 40);
+			goalPos += exitVector * ((owner->attackTarget != NULL) ? owner->attackTarget->StableRadius() + owner->radius + 10 : owner->radius + 40);
 		}
 	}
 	const float3 tgp = goalPos + (goalPos - oldGoalPos) * 8;
@@ -523,10 +523,10 @@ void CStrafeAirMoveType::UpdateFighterAttack()
 	}
 
 
-	if (goalDir.dot(frontdir) < -0.2f + inefficientAttackTime * 0.002f && frontdir.y > -0.2f && speedf > 2.0f && gs->randFloat() > 0.996f)
+	if (goalDir.dot(frontdir) < -0.2f + inefficientAttackTime * 0.002f && frontdir.y > -0.2f && speedf > 2.0f && gs->randFloat(owner) > 0.996f)
 		maneuver = 1;
 
-	if (goalDir.dot(frontdir) < -0.2f + inefficientAttackTime * 0.002f && math::fabs(frontdir.y) < 0.2f && gs->randFloat() > 0.996f && gHeightAW + 400 < pos.y) {
+	if (goalDir.dot(frontdir) < -0.2f + inefficientAttackTime * 0.002f && math::fabs(frontdir.y) < 0.2f && gs->randFloat(owner) > 0.996f && gHeightAW + 400 < pos.y) {
 		maneuver = 2;
 		maneuverSubState = 0;
 	}
@@ -606,8 +606,8 @@ void CStrafeAirMoveType::UpdateFighterAttack()
 			minPitch = hdif / maxElevatorSpeedf2;
 		}
 
-		if (lastColWarning && lastColWarningType == 2 && frontdir.dot(lastColWarning->pos + lastColWarning->speed * 20 - pos-owner->speed * 20) < 0) {
-			elevator = (updir.dot(lastColWarning->midPos - owner->midPos) > 0.0f)? -1 : 1;
+		if (lastColWarning && lastColWarningType == 2 && frontdir.dot(lastColWarning->StablePos() + lastColWarning->StableSpeed() * 20 - pos-owner->speed * 20) < 0) {
+			elevator = (updir.dot(lastColWarning->StableMidPos() - owner->midPos) > 0.0f)? -1 : 1;
 		} else {
 			const float hdif = goalDir.dot(updir);
 			if (hdif < -maxElevatorSpeedf) {
@@ -675,7 +675,7 @@ void CStrafeAirMoveType::UpdateFlying(float wantedHeight, float engine)
 	float otherThreat = 0.0f;
 	float3 otherDir; // only used if lastColWarning == true
 	if (lastColWarning) {
-		const float3 otherDif = lastColWarning->pos - pos;
+		const float3 otherDif = lastColWarning->StablePos() - pos;
 		const float otherLength = otherDif.Length();
 
 		otherDir =
@@ -756,8 +756,8 @@ void CStrafeAirMoveType::UpdateFlying(float wantedHeight, float engine)
 		bool notColliding = true;
 
 		if (lastColWarningType == 2) {
-			const float3 dir = lastColWarning->midPos - owner->midPos;
-			const float3 sdir = lastColWarning->speed - owner->speed;
+			const float3 dir = lastColWarning->StableMidPos() - owner->midPos;
+			const float3 sdir = lastColWarning->StableSpeed() - owner->speed;
 
 			if (frontdir.dot(dir + sdir * 20) < 0) {
 				elevator = updir.dot(dir) > 0 ? -1 : 1;
@@ -859,12 +859,12 @@ void CStrafeAirMoveType::UpdateLanding()
 
 			owner->Move3D(reservedLandingPos, false);
 			owner->physicalState = CSolidObject::OnGround;
-			owner->Block();
+			owner->QueBlock();
 			owner->physicalState = CSolidObject::Flying;
 
 			owner->Move3D(originalPos, false);
-			owner->Deactivate();
-			owner->script->StopMoving();
+			owner->QueDeactivate();
+			owner->QueScriptStopMoving();
 		} else {
 			goalPos.ClampInBounds();
 			UpdateFlying(wantedHeight, 1);
@@ -1073,8 +1073,8 @@ void CStrafeAirMoveType::SetState(AAirMoveType::AircraftState newState)
 			owner->SetCrashing(true);
 			break;
 		case AIRCRAFT_FLYING:
-			owner->Activate();
-			owner->script->StartMoving();
+			owner->QueActivate();
+			owner->QueScriptStartMoving();
 			break;
 		case AIRCRAFT_LANDED:
 			owner->useAirLos = false;
@@ -1082,7 +1082,7 @@ void CStrafeAirMoveType::SetState(AAirMoveType::AircraftState newState)
 
 			//FIXME already inform commandAI in AIRCRAFT_LANDING!
 			//FIXME Problem is StopMove() also calls owner->script->StopMoving() what should only be called when landed. Also see CHoverAirMoveType::SetState().
-			owner->commandAI->StopMove();
+			owner->QueCAIStopMove();
 			break;
 		default:
 			break;
@@ -1095,7 +1095,7 @@ void CStrafeAirMoveType::SetState(AAirMoveType::AircraftState newState)
 
 	// this checks our physicalState, and blocks only
 	// if not flying (otherwise unblocks and returns)
-	owner->Block();
+	owner->QueBlock();
 }
 
 

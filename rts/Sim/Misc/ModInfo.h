@@ -174,9 +174,13 @@ public:
 	int featureVisibility;
 	// Lua threading model: Controls which Lua MT optimizations the mod will use by default (see LuaConfig.h for details)
 	int luaThreadingModel;
+	// multithreaded simulation, much faster but with possible side effects (requires asyncPathFinder, see below)
+	bool multiThreadSim;
 
 	// which pathfinder system (DEFAULT/legacy or QTPFS) the mod will use
 	int pathFinderSystem;
+	// use asynchronous path finder in a separate thread. faster, but with possible side effects
+	bool asyncPathFinder;
 };
 
 extern CModInfo modInfo;

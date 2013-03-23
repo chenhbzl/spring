@@ -66,6 +66,7 @@ public:
 	/// controls use of smoothGround for determining altitude
 	bool useSmoothMesh;
 	bool autoLand;
+	float3 airBasePadPos;
 
 protected:
 	void CheckForCollision();

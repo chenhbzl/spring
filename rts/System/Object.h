@@ -87,7 +87,7 @@ public:
 
 protected:
 	const TSyncSafeSet& GetListeners(const DependenceType dep) { return listeners[dep]; }
-	const TDependenceMap& GetAllListeners() const { return listeners; }
+	const TDependenceMap& GetAllListeners() const { ASSERT_SINGLETHREADED_SIM(); return listeners; }
 	const TSyncSafeSet& GetListening(const DependenceType dep)  { return listening[dep]; }
 	const TDependenceMap& GetAllListening() const { return listening; }
 

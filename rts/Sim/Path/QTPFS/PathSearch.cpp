@@ -76,7 +76,8 @@ bool QTPFS::PathSearch::Execute(
 	// nodes can represent many terrain squares, some of which can still
 	// be passable and allow a unit to move within a node)
 	// NOTE: we need to make sure such paths do not have infinite cost!
-	if (srcNode->GetMoveCost() == QTPFS_POSITIVE_INFINITY) {
+	bool infcost = (srcNode->GetMoveCost() == QTPFS_POSITIVE_INFINITY);
+	if (infcost) {
 		srcNode->SetMoveCost(0.0f);
 	}
 
@@ -99,7 +100,7 @@ bool QTPFS::PathSearch::Execute(
 		}
 	}
 
-	if (srcNode->GetMoveCost() == 0.0f) {
+	if (infcost) {
 		srcNode->SetMoveCost(QTPFS_POSITIVE_INFINITY);
 	}
 		

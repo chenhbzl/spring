@@ -209,7 +209,7 @@ void CGameInfo::Draw()
 
 	if (GML::Enabled()) {
 		labels.push_back("MT Threads:");
-		values.push_back(IntToString(GML::ThreadCount()));
+		values.push_back(IntToString(GML::ThreadCount() + Threading::SimThreadCount() - 1));
 	}
 
 	if (gs->cheatEnabled) {

@@ -53,12 +53,18 @@ CPathManager::~CPathManager()
 }
 
 
+void CPathManager::MergePathCaches() {
+	medResPE->MergePathCache();
+	lowResPE->MergePathCache();
+}
+
 
 /*
 Help-function.
 Turns a start->goal-request into a well-defined request.
 */
 unsigned int CPathManager::RequestPath(
+	ST_FUNC
 	CSolidObject* caller,
 	const MoveDef* moveDef,
 	const float3& startPos,
@@ -100,10 +106,6 @@ unsigned int CPathManager::RequestPath(
 	newPath->finalGoal = goalPos;
 	newPath->caller = caller;
 
-	if (caller) {
-		caller->UnBlock();
-	}
-
 	unsigned int pathID = 0;
 
 	// choose the PF or the PE depending on the projected 2D goal-distance
@@ -125,13 +127,13 @@ unsigned int CPathManager::RequestPath(
 		// fallback (note that this uses the estimators as backup,
 		// unconstrained PF queries are too expensive on average)
 		if (result != IPath::Ok) {
-			result = medResPE->GetPath(*moveDef, startPos, *pfDef, newPath->medResPath, MAX_SEARCHED_NODES_PE >> 3, synced);
+			result = medResPE->GetPath(*moveDef, startPos, *pfDef, newPath->medResPath, MAX_SEARCHED_NODES_PE >> 3, caller, synced);
 		}
 		if (result != IPath::Ok) {
-			result = lowResPE->GetPath(*moveDef, startPos, *pfDef, newPath->lowResPath, MAX_SEARCHED_NODES_PE >> 3, synced);
+			result = lowResPE->GetPath(*moveDef, startPos, *pfDef, newPath->lowResPath, MAX_SEARCHED_NODES_PE >> 3, caller, synced);
 		}
 	} else if (goalDist2D < ESTIMATE_DISTANCE) {
-		result = medResPE->GetPath(*moveDef, startPos, *pfDef, newPath->medResPath, MAX_SEARCHED_NODES_PE >> 3, synced);
+		result = medResPE->GetPath(*moveDef, startPos, *pfDef, newPath->medResPath, MAX_SEARCHED_NODES_PE >> 3, caller, synced);
 
 		// CantGetCloser may be a false positive due to PE approximations and large goalRadius
 		if (result == IPath::CantGetCloser && (startPos - goalPos).SqLength2D() > pfDef->sqGoalRadius)
@@ -143,14 +145,14 @@ unsigned int CPathManager::RequestPath(
 
 		// fallback
 		if (result != IPath::Ok) {
-			result = medResPE->GetPath(*moveDef, startPos, *pfDef, newPath->medResPath, MAX_SEARCHED_NODES_PE >> 3, synced);
+			result = medResPE->GetPath(*moveDef, startPos, *pfDef, newPath->medResPath, MAX_SEARCHED_NODES_PE >> 3, caller, synced);
 		}
 	} else {
-		result = lowResPE->GetPath(*moveDef, startPos, *pfDef, newPath->lowResPath, MAX_SEARCHED_NODES_PE >> 3, synced);
+		result = lowResPE->GetPath(*moveDef, startPos, *pfDef, newPath->lowResPath, MAX_SEARCHED_NODES_PE >> 3, caller, synced);
 
 		// CantGetCloser may be a false positive due to PE approximations and large goalRadius
 		if (result == IPath::CantGetCloser && (startPos - goalPos).SqLength2D() > pfDef->sqGoalRadius) {
-			result = medResPE->GetPath(*moveDef, startPos, *pfDef, newPath->medResPath, MAX_SEARCHED_NODES_PE >> 3, synced);
+			result = medResPE->GetPath(*moveDef, startPos, *pfDef, newPath->medResPath, MAX_SEARCHED_NODES_PE >> 3, caller, synced);
 			if (result == IPath::CantGetCloser) // Same thing again
 				result = maxResPF->GetPath(*moveDef, startPos, *pfDef, caller, newPath->maxResPath, MAX_SEARCHED_NODES_PF >> 3, true, false, true, synced);
 		}
@@ -161,7 +163,7 @@ unsigned int CPathManager::RequestPath(
 
 		// fallback
 		if (result != IPath::Ok) {
-			result = lowResPE->GetPath(*moveDef, startPos, *pfDef, newPath->lowResPath, MAX_SEARCHED_NODES_PE >> 3, synced);
+			result = lowResPE->GetPath(*moveDef, startPos, *pfDef, newPath->lowResPath, MAX_SEARCHED_NODES_PE >> 3, caller, synced);
 		}
 	}
 
@@ -189,10 +191,6 @@ unsigned int CPathManager::RequestPath(
 		delete newPath;
 	}
 
-	if (caller) {
-		caller->Block();
-	}
-
 	return pathID;
 }
 
@@ -202,7 +200,9 @@ Store a new multipath into the pathmap.
 */
 unsigned int CPathManager::Store(MultiPath* path)
 {
-	pathMap[++nextPathID] = path;
+	unsigned int npi; // overflow can desync the simulation, but it would take a HUGE game
+	do { npi = ++nextPathID; } while ((npi == 0) || (pathMap.find(npi) != pathMap.end()));
+	pathMap[npi] = path;
 	return nextPathID;
 }
 
@@ -288,9 +288,9 @@ void CPathManager::LowRes2MedRes(MultiPath& multiPath, const float3& startPos, c
 	IPath::SearchResult result = IPath::Error;
 
 	if (lowResPath.path.empty()) {
-		result = medResPE->GetPath(*multiPath.moveDef, startPos, *multiPath.peDef, medResPath, MAX_SEARCHED_NODES_ON_REFINE, synced);
+		result = medResPE->GetPath(*multiPath.moveDef, startPos, *multiPath.peDef, medResPath, MAX_SEARCHED_NODES_ON_REFINE, owner, synced);
 	} else {
-		result = medResPE->GetPath(*multiPath.moveDef, startPos, rangedGoal, medResPath, MAX_SEARCHED_NODES_ON_REFINE, synced);
+		result = medResPE->GetPath(*multiPath.moveDef, startPos, rangedGoal, medResPath, MAX_SEARCHED_NODES_ON_REFINE, owner, synced);
 	}
 
 	// If no refined path could be found, set goal as desired goal.
@@ -304,6 +304,7 @@ void CPathManager::LowRes2MedRes(MultiPath& multiPath, const float3& startPos, c
 Removes and return the next waypoint in the multipath corresponding to given id.
 */
 float3 CPathManager::NextWayPoint(
+	ST_FUNC
 	const CSolidObject* owner,
 	unsigned int pathID,
 	unsigned int numRetries,
@@ -344,15 +345,7 @@ float3 CPathManager::NextWayPoint(
 			LowRes2MedRes(*multiPath, callerPos, owner, synced);
 		}
 
-		if (multiPath->caller) {
-			multiPath->caller->UnBlock();
-		}
-
 		MedRes2MaxRes(*multiPath, callerPos, owner, synced);
-
-		if (multiPath->caller) {
-			multiPath->caller->Block();
-		}
 	}
 
 	float3 waypoint;
@@ -373,7 +366,7 @@ float3 CPathManager::NextWayPoint(
 					waypoint = noPathPoint; break;
 				}
 			} else {
-				waypoint = NextWayPoint(owner, pathID, numRetries + 1, callerPos, radius, synced);
+				waypoint = NextWayPoint(ST_CALL owner, pathID, numRetries + 1, callerPos, radius, synced);
 				break;
 			}
 		} else {
@@ -391,7 +384,7 @@ float3 CPathManager::NextWayPoint(
 
 
 // Delete a given multipath from the collection.
-void CPathManager::DeletePath(unsigned int pathID) {
+void CPathManager::DeletePath(ST_FUNC unsigned int pathID) {
 	// 0 indicate a no-path id.
 	if (pathID == 0)
 		return;
@@ -407,14 +400,15 @@ void CPathManager::DeletePath(unsigned int pathID) {
 
 
 // Tells estimators about changes in or on the map.
-void CPathManager::TerrainChange(unsigned int x1, unsigned int z1, unsigned int x2, unsigned int z2, unsigned int /*type*/) {
+void CPathManager::TerrainChange(ST_FUNC unsigned int x1, unsigned int z1, unsigned int x2, unsigned int z2, unsigned int /*type*/) {
+	ASSERT_SINGLETHREADED_SIM();
 	medResPE->MapChanged(x1, z1, x2, z2);
 	lowResPE->MapChanged(x1, z1, x2, z2);
 }
 
 
 
-void CPathManager::Update()
+void CPathManager::Update(ST_FUNC int unused)
 {
 	SCOPED_TIMER("PathManager::Update");
 
@@ -426,7 +420,7 @@ void CPathManager::Update()
 }
 
 
-void CPathManager::UpdateFull()
+void CPathManager::UpdateFull(ST_FUNC int unused)
 {
 	medResPE->UpdateFull();
 	lowResPE->UpdateFull();
@@ -434,7 +428,7 @@ void CPathManager::UpdateFull()
 
 
 // used to deposit heat on the heat-map as a unit moves along its path
-void CPathManager::UpdatePath(const CSolidObject* owner, unsigned int pathID)
+void CPathManager::UpdatePath(ST_FUNC const CSolidObject* owner, unsigned int pathID)
 {
 	pathFlowMap->AddFlow(owner);
 	pathHeatMap->AddHeat(owner, this, pathID);
@@ -480,10 +474,12 @@ void CPathManager::GetDetailedPathSquares(unsigned pathID, std::vector<int2>& po
 
 
 void CPathManager::GetPathWayPoints(
+	ST_FUNC
 	unsigned int pathID,
 	std::vector<float3>& points,
 	std::vector<int>& starts
 ) const {
+	ASSERT_SINGLETHREADED_SIM();
 	points.clear();
 	starts.clear();
 
@@ -524,7 +520,7 @@ boost::uint32_t CPathManager::GetPathCheckSum() const {
 
 
 
-bool CPathManager::SetNodeExtraCost(unsigned int x, unsigned int z, float cost, bool synced) {
+bool CPathManager::SetNodeExtraCost(ST_FUNC unsigned int x, unsigned int z, float cost, bool synced) {
 	if (x >= gs->mapx) { return false; }
 	if (z >= gs->mapy) { return false; }
 
@@ -538,7 +534,7 @@ bool CPathManager::SetNodeExtraCost(unsigned int x, unsigned int z, float cost, 
 	return true;
 }
 
-bool CPathManager::SetNodeExtraCosts(const float* costs, unsigned int sizex, unsigned int sizez, bool synced) {
+bool CPathManager::SetNodeExtraCosts(ST_FUNC const float* costs, unsigned int sizex, unsigned int sizez, bool synced) {
 	if (sizex < 1 || sizex > gs->mapx) { return false; }
 	if (sizez < 1 || sizez > gs->mapy) { return false; }
 
@@ -553,7 +549,7 @@ bool CPathManager::SetNodeExtraCosts(const float* costs, unsigned int sizex, uns
 	return true;
 }
 
-float CPathManager::GetNodeExtraCost(unsigned int x, unsigned int z, bool synced) const {
+float CPathManager::GetNodeExtraCost(ST_FUNC unsigned int x, unsigned int z, bool synced) const {
 	if (x >= gs->mapx) { return 0.0f; }
 	if (z >= gs->mapy) { return 0.0f; }
 
@@ -562,7 +558,7 @@ float CPathManager::GetNodeExtraCost(unsigned int x, unsigned int z, bool synced
 	return cost;
 }
 
-const float* CPathManager::GetNodeExtraCosts(bool synced) const {
+const float* CPathManager::GetNodeExtraCosts(ST_FUNC bool synced) const {
 	const PathNodeStateBuffer& buf = maxResPF->GetNodeStateBuffer();
 	const float* costs = buf.GetNodeExtraCosts(synced);
 	return costs;

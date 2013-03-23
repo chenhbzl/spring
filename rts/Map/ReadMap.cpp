@@ -308,6 +308,11 @@ void CReadMap::UpdateHeightMapSynced(SRectangle rect, bool initialize)
 		return;
 	}
 
+	// PathManager does not depend on the actual cornerheightmap, but it
+	// does depend on slopemap etc so threaded pathing must be disabled here
+	ASSERT_SINGLETHREADED_SIM();
+	ASSERT_NONTHREADED_PATH();
+
 	rect.x1 = std::max(         0, rect.x1 - 1);
 	rect.z1 = std::max(         0, rect.z1 - 1);
 	rect.x2 = std::min(gs->mapxm1, rect.x2 + 1);

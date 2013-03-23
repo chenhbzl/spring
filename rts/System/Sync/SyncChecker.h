@@ -4,7 +4,7 @@
 #define SYNCCHECKER_H
 
 #ifdef SYNCCHECK
-
+#include "System/Platform/ThreadingConfig.h"
 #ifdef TRACE_SYNC
 	#include "SyncTracer.h"
 #endif
@@ -13,6 +13,7 @@
 	#include "HsiehHash.h"
 #endif
 
+#include "DesyncDetector.h"
 #include <assert.h>
 
 /**
@@ -35,9 +36,19 @@ class CSyncChecker {
 		 * Keeps a running checksum over all assignments to synced variables.
 		 */
 		static unsigned GetChecksum() { return g_checksum; }
-		static void NewFrame() { g_checksum = 0xfade1eaf; }
+		static void NewFrame() { g_checksum = 0xfade1eaf; DesyncDetector::NewFrame(); }
 
 		static void Sync(const void* p, unsigned size) {
+#ifndef UNIT_TEST
+#ifdef USE_DESYNC_DETECTOR
+			if (!DesyncDetector::Synced())
+				return;
+			unsigned& g_checksum = DesyncDetector::GetChecksum(CSyncChecker::g_checksum);;
+#else
+			if (Threading::multiThreadedSim)
+				return; // the current "sync" implementation is obviously not MT compatible :(
+#endif
+#endif
 			// most common cases first, make it easy for compiler to optimize for it
 			// simple xor is not enough to detect multiple zeroes, e.g.
 #ifdef TRACE_SYNC_HEAVY
@@ -84,6 +95,7 @@ class CSyncChecker {
 			}
 			}
 #endif
+			DesyncDetector::Sync(p, size, g_checksum);
 		}
 
 	private:

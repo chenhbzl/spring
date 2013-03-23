@@ -107,7 +107,7 @@ namespace Watchdog
 					if (!hangDetected) {
 						LOG_L(L_WARNING, "[Watchdog] Hang detection triggered for Spring %s.", SpringVersion::GetFull().c_str());
 						if (GML::Enabled())
-							LOG_L(L_WARNING, "MT with %d threads.", GML::ThreadCount());
+							LOG_L(L_WARNING, "MT with %d threads.", GML::ThreadCount() + Threading::SimThreadCount() - 1);
 					}
 					LOG_L(L_WARNING, "  (in thread: %s)", threadNames[i]);
 

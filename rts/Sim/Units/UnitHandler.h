@@ -5,6 +5,7 @@
 
 #include <vector>
 
+#include "Sim/Misc/GlobalConstants.h"
 #include "UnitDef.h"
 #include "UnitSet.h"
 #include "Sim/Misc/SimObjectIDPool.h"
@@ -22,6 +23,9 @@ public:
 	CUnitHandler();
 	~CUnitHandler();
 
+	void MoveTypeThreadFunc(int i);
+	void InitThreads();
+	void CleanThreads();
 	void Update();
 	void DeleteUnit(CUnit* unit);
 	void DeleteUnitNow(CUnit* unit);
@@ -58,6 +62,12 @@ public:
 
 	std::map<unsigned int, CBuilderCAI*> builderCAIs;
 
+	void UpdateMoveTypeThreadFunc(bool threaded);
+	void SlowUpdateMoveTypeInitThreadFunc(bool threaded);
+	void SlowUpdateMoveTypeThreadFunc(bool threaded);
+	void DelayedSlowUpdateMoveTypePart(int pos);
+	void DelayedSlowUpdateMoveTypeThreadFunc(bool threaded);
+
 private:
 	void InsertActiveUnit(CUnit* unit);
 
@@ -70,6 +80,8 @@ private:
 	///< global unit-limit (derived from the per-team limit)
 	///< units.size() is equal to this and constant at runtime
 	unsigned int maxUnits;
+
+	unsigned short blockOps[MAX_UNITS];
 
 	///< largest radius of any unit added so far (some
 	///< spatial query filters in GameHelper use this)

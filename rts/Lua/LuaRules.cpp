@@ -843,7 +843,7 @@ int CLuaRules::AllowWeaponTargetCheck(unsigned int attackerID, unsigned int atta
 		return -1;
 
 	LUA_CALL_IN_CHECK(L, -1);
-	lua_checkstack(L, 3 + 1);
+	lua_checkstack(L, 3 + 3);
 
 	const int errfunc(SetupTraceback(L));
 	static const LuaHashString cmdStr("AllowWeaponTargetCheck");
@@ -886,7 +886,7 @@ bool CLuaRules::AllowWeaponTarget(
 		return ret;
 
 	LUA_CALL_IN_CHECK(L, true);
-	lua_checkstack(L, 5 + 2);
+	lua_checkstack(L, 5 + 3);
 
 	const int errfunc(SetupTraceback(L));
 	static const LuaHashString cmdStr("AllowWeaponTarget");
