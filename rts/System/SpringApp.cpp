@@ -87,8 +87,6 @@ CONFIG(unsigned, SetCoreAffinitySim).defaultValue(0).safemodeValue(1).descriptio
 CONFIG(unsigned, SetCoreAffinitySimMT).defaultValue(0).safemodeValue(1).description("Defines a bitmask indicating which CPU cores the secondary sim-thread(s) should use.");
 CONFIG(unsigned, SetCoreAffinityRenderMT).defaultValue(0).safemodeValue(1).description("Defines a bitmask indicating which CPU cores the secondary render-thread(s) should use.");
 CONFIG(unsigned, SetCoreAffinityPath).defaultValue(0).safemodeValue(1).description("Defines a bitmask indicating which CPU cores the asynchronous path-thread should use.");
-CONFIG(int, DepthBufferBits).defaultValue(24);
-CONFIG(int, StencilBufferBits).defaultValue(8);
 CONFIG(int, FSAALevel).defaultValue(0).minimumValue(0).maximumValue(8);
 CONFIG(int, SmoothLines).defaultValue(2).safemodeValue(0).minimumValue(0).maximumValue(3).description("Smooth lines.\n 0 := off\n 1 := fastest\n 2 := don't care\n 3 := nicest");
 CONFIG(int, SmoothPoints).defaultValue(2).safemodeValue(0).minimumValue(0).maximumValue(3).description("Smooth points.\n 0 := off\n 1 := fastest\n 2 := don't care\n 3 := nicest");

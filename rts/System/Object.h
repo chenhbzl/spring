@@ -63,7 +63,7 @@ public:
 #define INSTANCE_OF_SUBCLASS_OF(type,obj) ((obj->objType & kind) == kind) // exact class or any subclass of it
 #define INSTANCE_OF(type,obj) (obj->objType == type) // exact class only, saves one instruction yay :)
 */
-	const boost::int64_t GetSyncID() const { return sync_id; }
+
 private:
 	// Note, this has nothing to do with the UnitID, FeatureID, ...
 	// It's only purpose is to make the sorting in TSyncSafeSet syncsafe
