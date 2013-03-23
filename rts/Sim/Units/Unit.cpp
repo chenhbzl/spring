@@ -898,7 +898,7 @@ void CUnit::SlowUpdate()
 	DoWaterDamage();
 
 	if (health < 0.0f) {
-		KillUnit(false, true, NULL);
+		KillUnit(NULL, false, true);
 		return;
 	}
 
@@ -937,9 +937,9 @@ void CUnit::SlowUpdate()
 		if ((selfDCountdown -= 1) == 0) {
 			// avoid unfinished buildings making an explosion
 			if (!beingBuilt) {
-				KillUnit(true, false, NULL);
+				KillUnit(NULL, true, false);
 			} else {
-				KillUnit(false, true, NULL);
+				KillUnit(NULL, false, true);
 			}
 			return;
 		}
@@ -961,7 +961,7 @@ void CUnit::SlowUpdate()
 			AddMetal(metalCost * buildDecay, false);
 
 			if (health <= 0.0f || buildProgress <= 0.0f) {
-				KillUnit(false, true, NULL);
+				KillUnit(NULL, false, true);
 			}
 		}
 
@@ -1033,7 +1033,7 @@ void CUnit::SlowUpdate()
 				if (dif.SqLength() < Square(unitDef->kamikazeDist)) {
 					if (victim->speed.dot(dif) <= 0) {
 						//! self destruct when we start moving away from the target, this should maximize the damage
-						KillUnit(true, false, NULL);
+						KillUnit(NULL, true, false);
 						return;
 					}
 				}
@@ -1044,7 +1044,7 @@ void CUnit::SlowUpdate()
 			   (attackTarget     && (attackTarget->pos.SqDistance(pos) < Square(unitDef->kamikazeDist)))
 			|| (userAttackGround && (attackPos.SqDistance(pos))  < Square(unitDef->kamikazeDist))
 		) {
-			KillUnit(true, false, NULL);
+			KillUnit(NULL, true, false);
 			return;
 		}
 	}
@@ -1160,10 +1160,10 @@ void CUnit::DoWaterDamage()
 	if (!isFloating && !onGround)
 		return;
 
-	DoDamage(DamageArray(mapInfo->water.damage), ZeroVector, NULL, -DAMAGE_EXTSOURCE_WATER);
+	DoDamage(DamageArray(mapInfo->water.damage), ZeroVector, NULL, -DAMAGE_EXTSOURCE_WATER, -1);
 }
 
-void CUnit::DoDamage(const DamageArray& damages, const float3& impulse, CUnit* attacker, int weaponDefID)
+void CUnit::DoDamage(const DamageArray& damages, const float3& impulse, CUnit* attacker, int weaponDefID, int projectileID)
 {
 	ASSERT_SINGLETHREADED_SIM();
 	if (isDead || crashing) {
@@ -1199,7 +1199,7 @@ void CUnit::DoDamage(const DamageArray& damages, const float3& impulse, CUnit* a
 	const int paralyzeTime = damages.paralyzeDamageTime;
 	const bool isParalyzer = (paralyzeTime != 0);
 
-	if (luaRules && luaRules->UnitPreDamaged(this, attacker, damage, weaponDefID, isParalyzer, &newDamage, &impulseMult)) {
+	if (luaRules && luaRules->UnitPreDamaged(this, attacker, damage, weaponDefID, projectileID, isParalyzer, &newDamage, &impulseMult)) {
 		damage = newDamage;
 	}
 
@@ -1270,8 +1270,8 @@ void CUnit::DoDamage(const DamageArray& damages, const float3& impulse, CUnit* a
 
 	recentDamage += damage;
 
-	eventHandler.UnitDamaged(this, attacker, damage, weaponDefID, isParalyzer);
-	eoh->UnitDamaged(*this, attacker, damage, weaponDefID, isParalyzer);
+	eventHandler.UnitDamaged(this, attacker, damage, weaponDefID, projectileID, isParalyzer);
+	eoh->UnitDamaged(*this, attacker, damage, weaponDefID, projectileID, isParalyzer);
 
 #ifdef TRACE_SYNC
 	tracefile << "Damage: ";
@@ -1291,7 +1291,7 @@ void CUnit::DoDamage(const DamageArray& damages, const float3& impulse, CUnit* a
 	}
 
 	if (health <= 0.0f) {
-		KillUnit(false, false, attacker);
+		KillUnit(attacker, false, false);
 
 		if (!isDead) { return; }
 		if (beingBuilt) { return; }
@@ -1894,12 +1894,12 @@ bool CUnit::AddBuildPower(float amount, CUnit* builder)
 
 		if (beingBuilt) {
 			if (buildProgress <= 0.0f || health <= 0.0f) {
-				KillUnit(false, true, NULL);
+				KillUnit(NULL, false, true);
 				return false;
 			}
 		} else {
 			if (health <= 0.0f) {
-				KillUnit(false, true, NULL);
+				KillUnit(NULL, false, true);
 				return false;
 			}
 		}
@@ -1956,12 +1956,12 @@ void CUnit::FinishedBuilding(bool postInit)
 		}
 
 		QueUnBlock();
-		KillUnit(false, true, NULL);
+		KillUnit(NULL, false, true);
 	}
 }
 
 
-void CUnit::KillUnit(bool selfDestruct, bool reclaimed, CUnit* attacker, bool showDeathSequence)
+void CUnit::KillUnit(CUnit* attacker, bool selfDestruct, bool reclaimed, bool showDeathSequence)
 {
 	ASSERT_SINGLETHREADED_SIM();
 	if (isDead) { return; }
@@ -2001,13 +2001,14 @@ void CUnit::KillUnit(bool selfDestruct, bool reclaimed, CUnit* attacker, bool sh
 				false,                             // impactOnly
 				false,                             // ignoreOwner
 				true,                              // damageGround
+				-1u                                // projectileID
 			};
 
 			helper->Explosion(params);
 		}
 
 		if (selfDestruct) {
-			recentDamage += maxHealth * 2;
+			recentDamage += (maxHealth * 2.0f);
 		}
 
 		// start running the unit's kill-script
@@ -2423,7 +2424,7 @@ void CUnit::QueKillUnit(bool deathseq, bool delay) {
 		ASSERT_THREAD_OWNS_UNIT();
 		delayOps.push_back(DelayOp(KILLUNIT, deathseq));
 	} else {
-		KillUnit(true, false, NULL, deathseq);
+		KillUnit(NULL, deathseq, !deathseq, deathseq);
 	}
 }
 void CUnit::QueMove(bool delay) {
@@ -2478,7 +2479,7 @@ void CUnit::QueDoDamage(CSolidObject *o, float damage, const float3& impulse, in
 		ASSERT_THREAD_OWNS_UNIT();
 		delayOps.push_back(DelayOp(DODAMAGE, o, damage, impulse, d));
 	} else {
-		o->DoDamage(DamageArray(damage), -impulse, NULL, d);
+		o->DoDamage(DamageArray(damage), -impulse, NULL, d, -1);
 	}
 }
 

@@ -1016,8 +1016,15 @@ float3 CGroundMoveType::GetObstacleAvoidanceDir(const float3& desiredDir) {
 	nextObstacleAvoidanceUpdate = gs->frameNum + 1;
 
 	CUnit* avoider = owner;
-	//const UnitDef* avoiderUD = avoider->unitDef;
+	// const UnitDef* avoiderUD = avoider->unitDef;
 	const MoveDef* avoiderMD = avoider->moveDef;
+
+	// degenerate case: if facing anti-parallel to desired direction,
+	// do not actively avoid obstacles since that can interfere with
+	// normal waypoint steering (if the final avoidanceDir demands a
+	// turn in the opposite direction of desiredDir)
+	if (avoider->frontdir.dot(desiredDir) < 0.0f)
+		return lastAvoidanceDir;
 
 	static const float AVOIDER_DIR_WEIGHT = 1.0f;
 	static const float DESIRED_DIR_WEIGHT = 0.5f;
@@ -1157,8 +1164,7 @@ void CGroundMoveType::GetNewPath()
 		atGoal = false;
 		atEndOfPath = false;
 
-		currWayPoint = owner->pos;
-		// currWayPoint = pathManager->NextWayPoint(owner, pathId, 0,   owner->pos, 1.25f * SQUARE_SIZE, true);
+		currWayPoint = pathManager->NextWayPoint(owner, pathId, 0,   owner->pos, 1.25f * SQUARE_SIZE, true);
 		nextWayPoint = pathManager->NextWayPoint(owner, pathId, 0, currWayPoint, 1.25f * SQUARE_SIZE, true);
 
 		pathController->SetRealGoalPosition(pathId, goalPos); // Note: has no effect, is not MT safe
@@ -2012,15 +2018,17 @@ void CGroundMoveType::KeepPointingTo(float3 pos, float distance, bool aggressive
 	float3 dir1 = frontWeapon->mainDir;
 	float3 dir2 = mainHeadingPos - owner->pos;
 
-	dir1.y = 0.0f;
-	dir1.Normalize();
-	dir2.y = 0.0f;
-	dir2.SafeNormalize();
+	// in this case aligning is impossible
+	if (dir1 == UpVector)
+		return;
+
+	dir1.y = 0.0f; dir1.SafeNormalize();
+	dir2.y = 0.0f; dir2.SafeNormalize();
 
 	if (dir2 == ZeroVector)
 		return;
 
-	short heading =
+	const short heading =
 		GetHeadingFromVector(dir2.x, dir2.z) -
 		GetHeadingFromVector(dir1.x, dir1.z);
 

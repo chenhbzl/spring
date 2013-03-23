@@ -60,13 +60,6 @@ CFactory::CFactory():
 {
 }
 
-CFactory::~CFactory() {
-	if (curBuild != NULL) {
-		curBuild->KillUnit(false, true, NULL);
-		curBuild = NULL;
-	}
-}
-
 
 
 void CFactory::PostLoad()
@@ -79,6 +72,16 @@ void CFactory::PostLoad()
 	if (curBuild) {
 		script->StartBuilding();
 	}
+}
+
+void CFactory::KillUnit(CUnit* attacker, bool selfDestruct, bool reclaimed, bool showDeathSequence)
+{
+	if (curBuild != NULL) {
+		curBuild->KillUnit(NULL, false, true);
+		curBuild = NULL;
+	}
+
+	CUnit::KillUnit(attacker, selfDestruct, reclaimed, showDeathSequence);
 }
 
 void CFactory::PreInit(const UnitLoadParams& params)
@@ -261,9 +264,11 @@ void CFactory::FinishBuild(CUnit* buildee) {
 	}
 
 	const CCommandAI* bcai = buildee->commandAI;
-	const bool assignOrders = bcai->commandQue.empty() || (dynamic_cast<const CMobileCAI*>(bcai) != NULL);
+	// if not idle, the buildee already has user orders
+	const bool buildeeIdle = (bcai->commandQue.empty());
+	const bool buildeeMobile = (dynamic_cast<const CMobileCAI*>(bcai) != NULL);
 
-	if (assignOrders) {
+	if (buildeeIdle || buildeeMobile) {
 		AssignBuildeeOrders(buildee);
 		waitCommandsAI.AddLocalUnit(buildee, this);
 	}
@@ -272,7 +277,7 @@ void CFactory::FinishBuild(CUnit* buildee) {
 	finishedBuildFunc(this, finishedBuildCommand);
 	finishedBuildFunc = NULL;
 
-	eventHandler.UnitFromFactory(buildee, this, !assignOrders);
+	eventHandler.UnitFromFactory(buildee, this, !buildeeIdle);
 	StopBuild();
 }
 
@@ -311,7 +316,7 @@ void CFactory::StopBuild()
 	if (curBuild) {
 		if (curBuild->beingBuilt) {
 			AddMetal(curBuild->metalCost * curBuild->buildProgress, false);
-			curBuild->KillUnit(false, true, NULL);
+			curBuild->KillUnit(NULL, false, true);
 		}
 		DeleteDeathDependence(curBuild, DEPENDENCE_BUILD);
 	}
