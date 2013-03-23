@@ -90,7 +90,7 @@ namespace GML {
 			int lcpu = Threading::GetAvailableCores();
 			int pcpu = Threading::GetPhysicalCores();
 			// deduct all logical cores dedicated to the rendering/sim main threads
-			gmlThreadCountOverride = lcpu + GML::NumMainThreads() * (1 - (int)(lcpu / pcpu)); // add the main rendering/sim threads
+			gmlThreadCountOverride = lcpu + GML::NumMainThreads() * (1 - (int)(lcpu / pcpu)) - ThreadCountReductionForMultiCore(); // add the main rendering/sim threads
 		}
 #ifdef HEADLESS
 		gmlThreadCountOverride = std::min(2, GML_CPU_COUNT);
