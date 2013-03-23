@@ -347,6 +347,7 @@ void CUnitHandler::Update()
 
 
 inline void UpdateMoveType(CUnit *unit) {
+	Threading::SetThreadCurrentObjectID(unit->id);
 	UNIT_SANITY_CHECK(unit);
 
 	if (unit->moveType->Update())
@@ -363,41 +364,36 @@ inline void UpdateMoveType(CUnit *unit) {
 
 
 void CUnitHandler::UpdateMoveTypeThreadFunc(bool threaded) {
+	std::list<CUnit*>::iterator usi = activeUnits.begin();
 	if (!threaded) {
-		for (std::list<CUnit*>::iterator usi = activeUnits.begin(); usi != activeUnits.end(); ++usi) {
-			CUnit *unit = *usi;
-			Threading::SetThreadCurrentObjectID(unit->id);
-			UpdateMoveType(unit);
-		}
+		for (; usi != activeUnits.end(); ++usi)
+			UpdateMoveType(*usi);
 		return;
 	}
 	// (threaded)
 	int curPos = 0;
 	const int countEnd = activeUnits.size();
-	std::list<CUnit*>::iterator usi = activeUnits.begin();
-	while(true) {
+	while (true) {
 		int nextPos = simThreadPool->NextIter();
 		if (nextPos >= countEnd) break;
 		while(curPos < nextPos) { ++usi; ++curPos; }
-		CUnit *unit = *usi;
-		Threading::SetThreadCurrentObjectID(unit->id);
-		UpdateMoveType(unit);
+		UpdateMoveType(*usi);
 	}
 }
 
 void CUnitHandler::SlowUpdateMoveTypeInitThreadFunc(bool threaded) {
-	if (!threaded)
-		return;
-	// (threaded)
+	if (!modInfo.multiThreadSim)
+		return; // not needed for singlethreaded sim
+	// (threaded or not)
 	memset(CUnit::updateOps, 0, sizeof(CUnit::updateOps));
 }
 
 void CUnitHandler::SlowUpdateMoveTypeThreadFunc(bool threaded) {
+	std::list<CUnit*>::iterator sui = ((gs->frameNum & (UNIT_SLOWUPDATE_RATE - 1)) == 0) ? activeUnits.begin() : activeSlowUpdateUnit;
+	int curPos = 0;
+	const int countEnd = (activeUnits.size() / UNIT_SLOWUPDATE_RATE) + 1;
 	if (!threaded) {
-		std::list<CUnit*>::iterator sui = ((gs->frameNum & (UNIT_SLOWUPDATE_RATE - 1)) == 0) ? activeUnits.begin() : activeSlowUpdateUnit;
-		int n = (activeUnits.size() / UNIT_SLOWUPDATE_RATE) + 1;
-
-		for (; sui != activeUnits.end() && n != 0; ++sui) {
+		for (; sui != activeUnits.end() && curPos < countEnd; ++sui, ++curPos) {
 			CUnit *unit = *sui;
 			Threading::SetThreadCurrentObjectID(unit->id);
 			unit->moveType->SlowUpdate();
@@ -405,64 +401,67 @@ void CUnitHandler::SlowUpdateMoveTypeThreadFunc(bool threaded) {
 		return;
 	}
 	// (threaded)
-	int curPos = 0;
-	const int countEnd = (activeUnits.size() / UNIT_SLOWUPDATE_RATE) + 1;
-	std::list<CUnit*>::iterator sui = ((gs->frameNum & (UNIT_SLOWUPDATE_RATE - 1)) == 0) ? activeUnits.begin() : activeSlowUpdateUnit;
-
-	while(true) {
+	while (true) {
 		int nextPos = simThreadPool->NextIter();
 		if (nextPos >= countEnd) break;
 		while(curPos < nextPos && sui != activeUnits.end()) { ++sui; ++curPos; }
 		if (sui == activeUnits.end()) break;
-
 		CUnit *unit = *sui;
 		Threading::SetThreadCurrentObjectID(unit->id);
 		unit->moveType->SlowUpdate();
 	}
 }
 
+inline void CUnitHandler::DelayedSlowUpdateMoveTypePart(int pos) {
+	Threading::SetThreadCurrentObjectID(pos);
+	switch(pos) {
+		case 0:
+			for (int i = 0; i < MAX_UNITS; ++i) {
+				if (CUnit::updateOps[i] & CUnit::UPDATE_LOS) {
+					units[i]->QueUpdateLOS(false);
+				}
+			}
+			break;
+		case 1:
+			for (int i = 0; i < MAX_UNITS; ++i) {
+				if (CUnit::updateOps[i] & CUnit::UPDATE_RADAR) {
+					units[i]->QueUpdateRadar(false);
+				}
+			}
+			break;
+		case 2:
+			for (int i = 0; i < MAX_UNITS; ++i) {
+				if (CUnit::updateOps[i] & CUnit::UPDATE_QUAD) {
+					units[i]->QueUpdateQuad(false);
+				}
+			}
+			break;
+		case 3:
+			for (int i = 0; i < MAX_UNITS; ++i) {
+				if (CUnit::updateOps[i] & CUnit::FIND_PAD) {
+					units[i]->QueFindPad(false);
+				}
+			}
+			break;
+		default:
+			LOG_L(L_ERROR, "Invalid slow update type");
+	}
+}
+
 void CUnitHandler::DelayedSlowUpdateMoveTypeThreadFunc(bool threaded) {
-	if (!threaded)
+	if (!modInfo.multiThreadSim)
 		return; // not needed for singlethreaded sim
 	// (threaded)
 	const int countEnd = 4;
-	while(true) {
+	if (!threaded) {
+		for (int pos = 0; pos < countEnd; ++pos)
+			DelayedSlowUpdateMoveTypePart(pos);
+		return;
+	}
+	while (true) {
 		int nextPos = simThreadPool->NextIter();
-		if (nextPos >= countEnd)
-			break;
-		Threading::SetThreadCurrentObjectID(nextPos);
-		switch(nextPos) {
-			case 0:
-				for (int i = 0; i < MAX_UNITS; ++i) {
-					if (CUnit::updateOps[i] & CUnit::UPDATE_LOS) {
-						units[i]->QueUpdateLOS(false);
-					}
-				}
-				break;
-			case 1:
-				for (int i = 0; i < MAX_UNITS; ++i) {
-					if (CUnit::updateOps[i] & CUnit::UPDATE_RADAR) {
-						units[i]->QueUpdateRadar(false);
-					}
-				}
-				break;
-			case 2:
-				for (int i = 0; i < MAX_UNITS; ++i) {
-					if (CUnit::updateOps[i] & CUnit::UPDATE_QUAD) {
-						units[i]->QueUpdateQuad(false);
-					}
-				}
-				break;
-			case 3:
-				for (int i = 0; i < MAX_UNITS; ++i) {
-					if (CUnit::updateOps[i] & CUnit::FIND_PAD) {
-						units[i]->QueFindPad(false);
-					}
-				}
-				break;
-			default:
-				LOG_L(L_ERROR, "Invalid slow update type");
-		}
+		if (nextPos >= countEnd) break;
+		DelayedSlowUpdateMoveTypePart(nextPos);
 	}
 }
 

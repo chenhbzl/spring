@@ -39,12 +39,15 @@ CSimThreadPool::CSimThreadPool() :
 }
 
 void CSimThreadPool::Execute(void (* tf)(bool), void (* itf)(bool), int i) {
-	if (i == 0) {
-		InitThreadFunc = itf;
-		ThreadFunc = tf;
+	if (!modInfo.multiThreadSim) {
+		(*ThreadFunc)(false);
+		return;
 	}
 	if (simNumExtraThreads > 0) {
-		if (i > 0) {
+		if (i == 0) {
+			InitThreadFunc = itf;
+			ThreadFunc = tf;
+		} else {
 			streflop::streflop_init<streflop::Simple>();
 			GML::ThreadNumber(GML_MAX_NUM_THREADS + i);
 			char threadName[32];
@@ -67,7 +70,11 @@ void CSimThreadPool::Execute(void (* tf)(bool), void (* itf)(bool), int i) {
 		} while (i > 0);
 	}
 	else {
-		(*ThreadFunc)(false);
+		if (itf != NULL)
+			(*itf)(false);
+		Threading::SetThreadCurrentObjectID(-1);
+		(*tf)(false);
+		Threading::SetThreadCurrentObjectID(-1);
 	}
 }
 
