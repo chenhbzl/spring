@@ -61,6 +61,7 @@ volatile bool gmlMultiThreadSim = true;
 volatile bool gmlStartSim = false;
 volatile bool gmlKeepRunning = false;
 volatile bool gmlServerActive = false;
+volatile bool gmlMutexLockWait = false;
 
 #define EXEC_RUN (BYTE *)NULL
 #define EXEC_SYNC (BYTE *)-1
@@ -337,7 +338,7 @@ bool ThreadRegistered() {
 }
 // GMLqueue implementation
 gmlQueue::gmlQueue():
-ReadPos(0),WritePos(0),WriteSize(0),Read(0),Write(0),Locked1(FALSE),Locked2(FALSE),Reloc(FALSE),Sync(EXEC_RUN),WasSynced(FALSE),
+ReadPos(0),WritePos(0),WriteSize(0),Read(0),Write(0),Locked1(FALSE),Locked2(FALSE),Reloc(FALSE),Sync(EXEC_RUN),WasSynced(FALSE),Wait(FALSE),
 ClientState(0),
 CPsize(0), CPtype(0), CPstride(0), CPpointer(NULL),
 EFPstride(0), EFPpointer(NULL),
@@ -487,46 +488,71 @@ void gmlQueue::ReleaseWrite(BOOL_ final) {
 }
 
 BOOL_ gmlQueue::GetWrite(BOOL_ critical) {
-	while(1) {
-		if(!Locked1 && Empty(1)) {
-			if(Locks1.Lock()) {
-				Locked1=TRUE;
-				ReleaseWrite(critical==2);
-				WritePos=Write=Queue1;
-				WriteSize=Size1;
-				return TRUE;
-			}
+	int locknum = 0;
+	do {
+		boost::mutex::scoped_lock lock(Mut);
+		if (!Locked1 && Empty(1) && Locks1.Lock())
+			locknum = 1;
+		else if (!Locked2 && Empty(2) && Locks2.Lock())
+			locknum = 2;
+		if (!locknum && critical) {
+			Wait = TRUE;
+			Cond.wait(lock);
 		}
-		if(!Locked2 && Empty(2)) {
-			if(Locks2.Lock()) {
-				Locked2=TRUE;
-				ReleaseWrite(critical==2);
-				WritePos=Write=Queue2;
-				WriteSize=Size2;
-				return TRUE;
-			}
-		}
-		if(!critical)
-			return FALSE;
-		boost::thread::yield();
+	} while (!locknum && critical);
+	if (locknum == 1) {
+		Locked1=TRUE;
+		ReleaseWrite(critical==2);
+		WritePos=Write=Queue1;
+		WriteSize=Size1;
+		return TRUE;
+	}
+	if (locknum == 2) {
+		Locked2=TRUE;
+		ReleaseWrite(critical==2);
+		WritePos=Write=Queue2;
+		WriteSize=Size2;
+		return TRUE;
+	}
+	return FALSE;
+}
+
+void gmlQueue::WaitFinish() {
+	while (true) {
+		boost::mutex::scoped_lock lock(Mut);
+		if (Empty())
+			break;
+		Wait = TRUE;
+		Cond.wait(lock);
 	}
 }
 
 void gmlQueue::ReleaseRead() {
 	if(Read==NULL)
 		return;
-	if(Read==Queue1) {
-		Pos1=Queue1;
-		Locked1=FALSE;
-		Locks1.Unlock();
+	BOOL_ Waited;
+	{
+		boost::mutex::scoped_lock lock(Mut);
+
+		if(Read==Queue1) {
+			Pos1=Queue1;
+			Locked1=FALSE;
+			Locks1.Unlock();
+		}
+		else {
+			Pos2=Queue2;
+			Locked2=FALSE;
+			Locks2.Unlock();
+		}
+		Read=NULL;
+		ReadPos=NULL;
+
+		if ((Waited = Wait)) {
+			Wait = FALSE;
+		}
 	}
-	else {
-		Pos2=Queue2;
-		Locked2=FALSE;
-		Locks2.Unlock();
-	}
-	Read=NULL;
-	ReadPos=NULL;
+	if (Waited)
+		Cond.notify_one();
 }
 
 BOOL_ gmlQueue::GetRead(BOOL_ critical) {

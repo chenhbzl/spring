@@ -60,7 +60,8 @@ ${SEVENZIP} ${MIN_PORTABLE_ARCHIVE} ${INSTALLDIR}/* -x!spring-dedicated.exe -x!s
 (cd ${INSTALLDIR} && ${ZIP} ${MIN_PORTABLE_PLUS_DEDICATED_ARCHIVE} * -x spring-headless.exe \*.dbg)
 
 # compress files excluded from portable archive
-for file in spring-dedicated.exe spring-headless.exe; do
+ZIPEXECUTABLES="$(find -name '*.exe' -printf ' %f')"
+for file in ${ZIPEXECUTABLES}; do
 	name=${file%.*}
 	${SEVENZIP} ${TMP_PATH}/${VERSION}_${name}.7z ${file}
 done

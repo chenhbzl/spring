@@ -82,6 +82,12 @@ std::string GetAdditional()
 	#define GV_ADD_SPACE " "
 #endif
 
+#if defined CUSTOM_ENGINE_TYPE
+	GV_ADD_SPACE "APATH"
+	#undef  GV_ADD_SPACE
+	#define GV_ADD_SPACE " "
+#endif
+
 #if defined USE_GML
 	GV_ADD_SPACE "GML"
 	#undef  GV_ADD_SPACE
@@ -130,7 +136,7 @@ std::string GetAdditional()
 	#define GV_ADD_SPACE " "
 #endif
 
-#if defined _OPENMP
+#if defined _OPENMP && !defined CUSTOM_ENGINE_TYPE
 	GV_ADD_SPACE "OMP"
 	#undef  GV_ADD_SPACE
 	#define GV_ADD_SPACE " "
@@ -192,11 +198,28 @@ bool IsRelease()
 	return release;
 }
 
+
+const std::string GetMajorPrefix()
+{
+#if defined(UNITSYNC) || !defined(CUSTOM_ENGINE_TYPE)
+	return "";
+#endif
+	return "MT ";
+}
+
+const std::string GetMinorModifier()
+{
+#if defined(UNITSYNC) || !defined(CUSTOM_ENGINE_TYPE) 
+	return "";
+#endif
+	return (GetMinor() == "0") ? "" : ("-" + GetMinor());
+}
+
 const std::string& Get()
 {
 	static const std::string base = IsRelease()
-			? GetMajor()
-			: (GetMajor() + "." + GetPatchSet() + ".1");
+			? GetMajorPrefix() + GetMajor() + GetMinorModifier()
+			: (GetMajorPrefix() + GetMajor() + GetMinorModifier() + "." + GetPatchSet() + ".1");
 
 	return base;
 }
@@ -204,7 +227,7 @@ const std::string& Get()
 const std::string& GetSync()
 {
 	static const std::string sync = IsRelease()
-			? GetMajor()
+			? GetMajorPrefix() + GetMajor() + GetMinorModifier()
 			: SPRING_VERSION_ENGINE;
 
 	return sync;

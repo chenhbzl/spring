@@ -60,7 +60,7 @@ Macro    (AddEngineBuild build)
 EndMacro (AddEngineBuild)
 
 if    (NOT HEADLESS_SYSTEM)
-	AddEngineBuild(default)       ## ST, no GML
+##	AddEngineBuild(default)       ## ST, no GML
 	AddEngineBuild(multithreaded) ## MT-GML
 endif (NOT HEADLESS_SYSTEM)
 

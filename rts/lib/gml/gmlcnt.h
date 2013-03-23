@@ -23,6 +23,7 @@
 #endif
 
 #include <boost/config.hpp>
+#include <boost/smart_ptr/detail/sp_has_sync.hpp>
 
 // evaluate which locking method to use
 #if   !defined(BOOST_HAS_THREADS)
@@ -31,9 +32,9 @@
 	#define GML_THREADS_PTHREADS
 #elif defined( __GNUC__ ) && ( defined( __i386__ ) || defined( __x86_64__ ) )
 	#define GML_THREADS_ATOMIC
-#elif defined(WIN32) || defined(_WIN32) || defined(__WIN32__)
+#elif defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__CYGWIN__)
 	#define GML_THREADS_BOOST_INTERLOCK
-#elif defined( __GNUC__ ) && ( __GNUC__ * 100 + __GNUC_MINOR__ >= 401 ) && !defined( __arm__ ) && !defined( __hppa ) && ( !defined( __INTEL_COMPILER ) || defined( __ia64__ ) )
+#elif defined( BOOST_SP_HAS_SYNC )
 	#define GML_THREADS_SYNC
 #elif defined(__GLIBCPP__) || defined(__GLIBCXX__)
 	#define GML_THREADS_ATOMICITY
@@ -52,107 +53,121 @@ typedef long gmlCount;
 
 #include <pthread.h>
 
-class gmlCount {
+class gmlCount
+{
 private:
 
-    class scoped_lock {
-    public:
+	class scoped_lock
+	{
+	public:
 
-        scoped_lock(pthread_mutex_t & m): m_(m) {
-            pthread_mutex_lock(&m_);
-        }
+		scoped_lock(pthread_mutex_t & m): m_(m)
+		{
+			pthread_mutex_lock(&m_);
+		}
 
-        ~scoped_lock() {
-            pthread_mutex_unlock(&m_);
-        }
+		~scoped_lock()
+		{
+			pthread_mutex_unlock(&m_);
+		}
 
-    private:
+	private:
 
-        pthread_mutex_t & m_;
-    };
+		pthread_mutex_t & m_;
+	};
 
 public:
 
-    explicit gmlCount(long v): value_(v) {
-        pthread_mutex_init(&mutex_, 0);
-    }
+	explicit gmlCount(long v): value_(v)
+	{
+		pthread_mutex_init(&mutex_, 0);
+	}
 
-    ~gmlCount() {
-        pthread_mutex_destroy(&mutex_);
-    }
+	~gmlCount()
+	{
+		pthread_mutex_destroy(&mutex_);
+	}
 
-    long operator++() {
-        scoped_lock lock(mutex_);
-        return ++value_;
-    }
+	long operator++()
+	{
+		scoped_lock lock(mutex_);
+		return ++value_;
+	}
 
-    long operator--() {
-        scoped_lock lock(mutex_);
-        return --value_;
-    }
+	long operator--()
+	{
+		scoped_lock lock(mutex_);
+		return --value_;
+	}
 
-    operator long() const {
-        scoped_lock lock(mutex_);
-        return value_;
-    }
+	operator long() const
+	{
+		scoped_lock lock(mutex_);
+		return value_;
+	}
 
-    long value_;
+	long value_;
 
 private:
 
-    gmlCount(gmlCount const &);
-    gmlCount & operator=(gmlCount const &);
+	gmlCount(gmlCount const &);
+	gmlCount & operator=(gmlCount const &);
 
-    mutable pthread_mutex_t mutex_;
+	mutable pthread_mutex_t mutex_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 #elif defined(GML_THREADS_ATOMIC)
 
-class gmlCount {
+class gmlCount
+{
 public:
 
-    explicit gmlCount( long v ) : value_( static_cast< int >( v ) ) {}
+	explicit gmlCount( long v ) : value_( static_cast< int >( v ) ) {}
 
-    long operator++() {
-        return atomic_exchange_and_add( &value_, 1 ) + 1;
-    }
+	long operator++()
+	{
+		return atomic_exchange_and_add( &value_, +1 ) + 1;
+	}
 
-    long operator--() {
-        return atomic_exchange_and_add( &value_, -1 ) - 1;
-    }
+	long operator--()
+	{
+		return atomic_exchange_and_add( &value_, -1 ) - 1;
+	}
 
-    operator long() const {
-        return atomic_exchange_and_add( &value_, 0 );
-    }
+	operator long() const
+	{
+		return atomic_exchange_and_add( &value_, 0 );
+	}
 
-    mutable int value_;
-
-private:
-
-    gmlCount(gmlCount const &);
-    gmlCount & operator=(gmlCount const &);
+	mutable int value_;
 
 private:
 
-    static int atomic_exchange_and_add( int * pw, int dv ) {
-        // int r = *pw;
-        // *pw += dv;
-        // return r;
+	gmlCount(gmlCount const &);
+	gmlCount & operator=(gmlCount const &);
 
-        int r;
+private:
 
-        __asm__ __volatile__
-        (
-            "lock\n\t"
-            "xadd %1, %0":
-            "+m"( *pw ), "=r"( r ): // outputs (%0, %1)
-            "1"( dv ): // inputs (%2 == %1)
-            "memory", "cc" // clobbers
-        );
+	static int atomic_exchange_and_add( int * pw, int dv )
+	{
+		// int r = *pw;
+		// *pw += dv;
+		// return r;
 
-        return r;
-    }
+		int r;
+
+		__asm__ __volatile__
+			(
+			"lock\n\t"
+			"xadd %1, %0":
+			"+m"( *pw ), "=r"( r ): // outputs (%0, %1)
+			"1"( dv ): // inputs (%2 == %1)
+			"memory", "cc" // clobbers
+			);
+
+		return r;
+	}
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -164,29 +179,35 @@ private:
 
 #include <boost/detail/interlocked.hpp>
 
-class gmlCount {
+class gmlCount
+{
 public:
 
-    explicit gmlCount( long v ): value_( v ) {}
+	explicit gmlCount( long v ): value_( v )
+	{
+	}
 
-    long operator++() {
-        return BOOST_INTERLOCKED_INCREMENT( &value_ );
-    }
+	long operator++()
+	{
+		return BOOST_INTERLOCKED_INCREMENT( &value_ );
+	}
 
-    long operator--() {
-        return BOOST_INTERLOCKED_DECREMENT( &value_ );
-    }
+	long operator--()
+	{
+		return BOOST_INTERLOCKED_DECREMENT( &value_ );
+	}
 
-    operator long() const {
-        return static_cast<long const volatile &>( value_ );
-    }
+	operator long() const
+	{
+		return static_cast<long const volatile &>( value_ );
+	}
 
-    long value_;
+	long value_;
 
 private:
 
-    gmlCount( gmlCount const & );
-    gmlCount & operator=( gmlCount const & );
+	gmlCount( gmlCount const & );
+	gmlCount & operator=( gmlCount const & );
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -196,29 +217,33 @@ private:
 # include <ia64intrin.h>
 #endif
 
-class gmlCount {
+class gmlCount
+{
 public:
 
-    explicit gmlCount( long v ) : value_( v ) {}
+	explicit gmlCount( long v ) : value_( v ) {}
 
-    long operator++() {
-        return __sync_add_and_fetch( &value_, 1 );
-    }
+	long operator++()
+	{
+		return __sync_add_and_fetch( &value_, 1 );
+	}
 
-    long operator--() {
-        return __sync_add_and_fetch( &value_, -1 );
-    }
+	long operator--()
+	{
+		return __sync_add_and_fetch( &value_, -1 );
+	}
 
-    operator long() const {
-        return __sync_fetch_and_add( &value_, 0 );
-    }
+	operator long() const
+	{
+		return __sync_fetch_and_add( &value_, 0 );
+	}
 
-    mutable long value_;
+	mutable long value_;
 
 private:
 
-    gmlCount(gmlCount const &);
-    gmlCount & operator=(gmlCount const &);
+	gmlCount(gmlCount const &);
+	gmlCount & operator=(gmlCount const &);
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -233,29 +258,33 @@ using __gnu_cxx::__exchange_and_add;
 
 #endif
 
-class gmlCount {
+class gmlCount
+{
 public:
 
-    explicit gmlCount(long v) : value_(v) {}
+	explicit gmlCount( long v ) : value_( v ) {}
 
-    long operator++() {
-        return __exchange_and_add(&value_, 1) + 1;
-    }
+	long operator++()
+	{
+		return __exchange_and_add( &value_, +1 ) + 1;
+	}
 
-    long operator--() {
-        return __exchange_and_add(&value_, -1) - 1;
-    }
+	long operator--()
+	{
+		return __exchange_and_add( &value_, -1 ) - 1;
+	}
 
-    operator long() const {
-        return __exchange_and_add(&value_, 0);
-    }
+	operator long() const
+	{
+		return __exchange_and_add( &value_, 0 );
+	}
 
-    mutable _Atomic_word value_;
+	mutable _Atomic_word value_;
 
 private:
 
-    gmlCount(gmlCount const &);
-    gmlCount & operator=(gmlCount const &);
+	gmlCount(gmlCount const &);
+	gmlCount & operator=(gmlCount const &);
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////

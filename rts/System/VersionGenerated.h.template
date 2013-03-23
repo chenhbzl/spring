@@ -9,28 +9,28 @@
 #define VERSION_GENERATED_H
 
 /// examples: "83.0" "83.0.1-13-g1234567 develop"
-static const char* SPRING_VERSION_ENGINE            = "@SPRING_VERSION_ENGINE@";
+static const char* SPRING_VERSION_ENGINE            = "94.0";
 
 /// examples: "83"
-static const char* SPRING_VERSION_ENGINE_MAJOR      = "@SPRING_VERSION_ENGINE_MAJOR@";
+static const char* SPRING_VERSION_ENGINE_MAJOR      = "94";
 
 /// examples: "0"
-static const char* SPRING_VERSION_ENGINE_PATCH_SET  = "@SPRING_VERSION_ENGINE_PATCH_SET@";
+static const char* SPRING_VERSION_ENGINE_PATCH_SET  = "0";
 
 /// examples: "13"
-static const char* SPRING_VERSION_ENGINE_COMMITS    = "@SPRING_VERSION_ENGINE_COMMITS@";
+static const char* SPRING_VERSION_ENGINE_COMMITS    = "";
 
 /// examples: "1234567"
-static const char* SPRING_VERSION_ENGINE_HASH       = "@SPRING_VERSION_ENGINE_HASH@";
+static const char* SPRING_VERSION_ENGINE_HASH       = "";
 
 /// examples: "develop"
-static const char* SPRING_VERSION_ENGINE_BRANCH     = "@SPRING_VERSION_ENGINE_BRANCH@";
+static const char* SPRING_VERSION_ENGINE_BRANCH     = "";
 
 /// examples: "what a splendid day, isn't it?"
-static const char* SPRING_VERSION_ENGINE_ADDITIONAL = "@SPRING_VERSION_ENGINE_ADDITIONAL@";
+static const char* SPRING_VERSION_ENGINE_ADDITIONAL = "";
 
 /// examples: true, false
-static bool        SPRING_VERSION_ENGINE_RELEASE    = @SPRING_VERSION_ENGINE_RELEASE@;
+static bool        SPRING_VERSION_ENGINE_RELEASE    = true;
 
 #endif // VERSION_GENERATED_H
 

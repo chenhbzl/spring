@@ -46,8 +46,9 @@ namespace Threading {
 	 */
 	void DetectCores();
 	boost::uint32_t SetAffinity(boost::uint32_t cores_bitmask, bool hard = true);
+	unsigned GetDefaultAffinity(const char *threadName);
 	void SetAffinityHelper(const char* threadName, boost::uint32_t affinity);
-	int GetAvailableCores();
+	unsigned GetAvailableCores();
 	boost::uint32_t GetAvailableCoresMask();
 
 

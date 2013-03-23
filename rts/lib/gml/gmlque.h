@@ -10,6 +10,8 @@
 #ifndef GMLQUEUE_H
 #define GMLQUEUE_H
 
+#include <boost/thread/condition.hpp>
+
 struct VAdata {
 	GLint size;
 	GLenum type;
@@ -55,6 +57,9 @@ struct gmlQueue {
 	gmlLock Locks2;
 	volatile BOOL_ Locked1;
 	volatile BOOL_ Locked2;
+	boost::mutex Mut;
+	boost::condition_variable Cond;
+	BOOL_ Wait;
 	
 	volatile BOOL_ Reloc;
 	BYTE * volatile Sync;
@@ -100,6 +105,7 @@ struct gmlQueue {
 	BYTE *WaitRealloc(BYTE **e=NULL);
 	void ReleaseWrite(BOOL_ final=TRUE);
 	BOOL_ GetWrite(BOOL_ critical);
+	void WaitFinish();
 	void ReleaseRead();
 	BOOL_ GetRead(BOOL_ critical=FALSE);
 	void SyncRequest();

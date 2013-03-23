@@ -11,6 +11,7 @@
 #define GMLSRV_H
 
 #ifdef USE_GML
+#include "System/Config/ConfigHandler.h"
 #include "System/OffscreenGLContext.h"
 #include <boost/thread/thread.hpp>
 #include <boost/thread/barrier.hpp>
@@ -299,8 +300,7 @@ public:
 		new (ex+1) GML_TYPENAME gmlExecState<R,A,U>(wrk,wrka,wrkit,cls,mt,sm,nu,it,l1,l2,sw,swf);
 		newwork=TRUE;
 
-		while(!qd->Empty())
-			boost::thread::yield();
+		qd->WaitFinish();
 		++ClientsReady;	
 		gmlClientSub();
 
@@ -353,14 +353,16 @@ public:
 //			}
 		}
 		qd->ReleaseWrite();
-		while(!qd->Empty())
-			boost::thread::yield();
+		qd->WaitFinish();
 		++ClientsReady;	
 	}
 
 	void gmlClient() {
 		long thr = ++threadcnt;
 		set_threadnum(thr + 2);
+		char threadName[32];
+		sprintf(threadName,"RenderMT%d", thr);
+		Threading::SetAffinityHelper(threadName, configHandler->GetUnsigned("SetCoreAffinityRenderMT"));
 		if (gmlShareLists) {
 			ogc[thr]->WorkerThreadPost();
 		}
