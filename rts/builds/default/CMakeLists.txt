@@ -105,7 +105,7 @@ ENDIF (WIN32)
 ### Build the executable
 ADD_EXECUTABLE(engine-default ${EXE_FLAGS} ${engineSources} ${ENGINE_ICON} ${engineHeaders})
 TARGET_LINK_LIBRARIES(engine-default gml ${engineLibraries})
-SET_TARGET_PROPERTIES(engine-default PROPERTIES OUTPUT_NAME "spring")
+SET_TARGET_PROPERTIES(engine-default PROPERTIES OUTPUT_NAME "spring-mt")
 
 
 ### Install the executable
