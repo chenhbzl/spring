@@ -85,6 +85,7 @@ do
 
 	# finally, strip the executable
 	${STRIP} MacOS/${executable}
+	zip -9 ${TMP_PATH}/${VERSION}_MacOSX-10.6-SnowLeopard_${executable}.zip MacOS/${executable}
 done
 
 # continue with recursive dependencies
