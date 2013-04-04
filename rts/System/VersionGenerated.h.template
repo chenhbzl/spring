@@ -9,13 +9,13 @@
 #define VERSION_GENERATED_H
 
 /// examples: "83.0" "83.0.1-13-g1234567 develop"
-static const char* SPRING_VERSION_ENGINE            = "94.01";
+static const char* SPRING_VERSION_ENGINE            = "94.11";
 
 /// examples: "83"
 static const char* SPRING_VERSION_ENGINE_MAJOR      = "94";
 
 /// examples: "0"
-static const char* SPRING_VERSION_ENGINE_PATCH_SET  = "01";
+static const char* SPRING_VERSION_ENGINE_PATCH_SET  = "11";
 
 /// examples: "13"
 static const char* SPRING_VERSION_ENGINE_COMMITS    = "";

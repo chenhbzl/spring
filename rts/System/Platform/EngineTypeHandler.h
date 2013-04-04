@@ -27,7 +27,7 @@ namespace EngineTypeHandler {
 
 	inline unsigned int GetCurrentEngineType() { return 0; } // support for multiple engine types that are not sync compatible
 
-	std::string GetEngine(const EngineTypeVersion &etv, bool brief = false);
+	std::string GetEngine(const EngineTypeVersion &etv, bool brief = false, bool patch = false);
 
 	void SetRequestedEngineType(int engineType, int engineMinor);
 
