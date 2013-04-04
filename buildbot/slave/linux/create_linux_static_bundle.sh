@@ -76,7 +76,7 @@ touch ${INSTALLDIR}/springsettings.cfg
 ${SEVENZIP} ${MIN_PORTABLE_ARCHIVE} ${INSTALLDIR}/* -xr!spring-dedicated* -xr!spring-headless* -xr!*.dbg -xr!*.dbg.7z
 
 # compress files excluded from portable archive
-for file in spring-dedicated spring-headless; do
+for file in spring spring-multithreaded spring-mt spring-dedicated spring-headless; do
 	if [ -f ${file} ]; then
 		name=${file%.*}
 		${SEVENZIP} ${TMP_PATH}/${VERSION}_${name}-${FILEPREFIX}.7z ${file}
