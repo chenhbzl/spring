@@ -171,7 +171,12 @@ Write the DemoFileHeader at the start of the file and restores the original
 position in the file afterwards. */
 unsigned int CDemoRecorder::WriteFileHeader(bool updateStreamLength)
 {
+#ifdef _MSC_VER // MSVC8 behaves strange if tell/seek is called before anything has been written
+	const bool empty = (demoStream.str() == "");
+	const unsigned int pos = empty? 0 : demoStream.tellp();
+#else
 	const unsigned int pos = demoStream.tellp();
+#endif
 
 	DemoFileHeader tmpHeader;
 	memcpy(&tmpHeader, &fileHeader, sizeof(fileHeader));
@@ -179,7 +184,14 @@ unsigned int CDemoRecorder::WriteFileHeader(bool updateStreamLength)
 		tmpHeader.demoStreamSize = 0;
 	tmpHeader.swab(); // to little endian
 
-	demoStream.seekp(0);
+#ifdef _MSC_VER
+	if (!empty)
+#endif
+	{
+		demoStream.seekp(0);
+	}
+
+
 	demoStream.write((char*) &tmpHeader, sizeof(tmpHeader));
 	demoStream.seekp(pos);
 
@@ -197,7 +209,7 @@ void CDemoRecorder::WritePlayerStats()
 	for (std::vector< PlayerStatistics >::iterator it = playerStats.begin(); it != playerStats.end(); ++it) {
 		PlayerStatistics& stats = *it;
 		stats.swab();
-		demoStream.write((char*) &stats, sizeof(PlayerStatistics));
+		demoStream.write(reinterpret_cast<char*>(&stats), sizeof(PlayerStatistics));
 	}
 	playerStats.clear();
 
@@ -243,7 +255,7 @@ void CDemoRecorder::WriteTeamStats()
 		for (std::vector< TeamStatistics >::iterator it2 = it->begin(); it2 != it->end(); ++it2) {
 			TeamStatistics& stats = *it2;
 			stats.swab();
-			demoStream.write((char*)&stats, sizeof(TeamStatistics));
+			demoStream.write(reinterpret_cast<char*>(&stats), sizeof(TeamStatistics));
 		}
 	}
 	teamStats.clear();

@@ -17,6 +17,7 @@
 class CUnit;
 class CFeature;
 class CVertexArray;
+class CMatrix44f;
 struct LocalModelPiece;
 
 
@@ -61,6 +62,10 @@ public:
 
 	void SetCustomExplosionGeneratorID(unsigned int id) { cegID = id; }
 
+	// UNSYNCED ONLY
+	CMatrix44f GetTransformMatrix(bool offsetPos) const;
+
+public:
 	static bool inArray;
 	static CVertexArray* va;
 	static int DrawArray();

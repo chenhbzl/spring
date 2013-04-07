@@ -20,7 +20,7 @@
 #include "Game/Camera.h"
 #include "Game/GameHelper.h"
 #include "Game/PlayerHandler.h"
-#include "Game/SelectedUnits.h"
+#include "Game/SelectedUnitsHandler.h"
 #include "Map/Ground.h"
 #include "Map/MapDamage.h"
 #include "Map/MapInfo.h"
@@ -1333,7 +1333,7 @@ int LuaSyncedCtrl::SetUnitWeaponState(lua_State* L)
 		return 0;
 	}
 
-	const int weaponNum = luaL_checkint(L, 2);
+	const int weaponNum = luaL_checkint(L, 2) -1;
 	if ((weaponNum < 0) || ((size_t)weaponNum >= unit->weapons.size())) {
 		return 0;
 	}
@@ -3629,10 +3629,10 @@ int LuaSyncedCtrl::UnitWeaponFire(lua_State* L)
 
 	if (unit == NULL)
 		return 0;
-	if (static_cast<uint32_t>(luaL_checkint(L, 2)) >= unit->weapons.size())
+	if (static_cast<uint32_t>(luaL_checkint(L, 2)-1) >= unit->weapons.size())
 		return 0;
 
-	unit->weapons[luaL_checkint(L, 2)]->Fire();
+	unit->weapons[luaL_checkint(L, 2)-1]->Fire();
 	return 0;
 }
 int LuaSyncedCtrl::UnitWeaponHoldFire(lua_State* L)
@@ -3641,10 +3641,10 @@ int LuaSyncedCtrl::UnitWeaponHoldFire(lua_State* L)
 
 	if (unit == NULL)
 		return 0;
-	if (static_cast<uint32_t>(luaL_checkint(L, 2)) >= unit->weapons.size())
+	if (static_cast<uint32_t>(luaL_checkint(L, 2)-1) >= unit->weapons.size())
 		return 0;
 
-	unit->weapons[luaL_checkint(L, 2)]->HoldFire();
+	unit->weapons[luaL_checkint(L, 2)-1]->HoldFire();
 	return 0;
 }
 
@@ -3863,7 +3863,7 @@ int LuaSyncedCtrl::EditUnitCmdDesc(lua_State* L)
 
 	ParseCommandDescription(L, 3, cmdDescs[cmdDescID]);
 
-	selectedUnits.PossibleCommandChange(unit);
+	selectedUnitsHandler.PossibleCommandChange(unit);
 
 	return 0;
 }
@@ -3910,7 +3910,7 @@ int LuaSyncedCtrl::InsertUnitCmdDesc(lua_State* L)
 		cmdDescs.insert(it, cd);
 	}
 
-	selectedUnits.PossibleCommandChange(unit);
+	selectedUnitsHandler.PossibleCommandChange(unit);
 
 	return 0;
 }
@@ -3941,7 +3941,7 @@ int LuaSyncedCtrl::RemoveUnitCmdDesc(lua_State* L)
 	advance(it, cmdDescID);
 	cmdDescs.erase(it);
 
-	selectedUnits.PossibleCommandChange(unit);
+	selectedUnitsHandler.PossibleCommandChange(unit);
 
 	return 0;
 }

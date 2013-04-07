@@ -53,15 +53,19 @@ endmacro (CreateEngineBuildAndInstallTarget targetName)
 
 # This allows us to disable each build type individually at configure stage.
 Macro    (AddEngineBuild build)
-	Set(BUILD_spring-${build} TRUE CACHE BOOL "Configure the spring-${build} target.")
+	option(BUILD_spring-${build} "Configure the spring-${build} target." TRUE)
 	If     (BUILD_spring-${build})
 		Add_Subdirectory(${build})
 	EndIf  ()
 EndMacro (AddEngineBuild)
 
 if    (NOT HEADLESS_SYSTEM)
-##	AddEngineBuild(default)       ## ST, no GML
-	AddEngineBuild(multithreaded) ## MT-GML
+	add_custom_target(spring WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+	add_custom_target(install-spring WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+	AddEngineBuild(default) ## ASIM GML OMP
+	if    (LEGACY_SYSTEM)
+##		AddEngineBuild(legacy) ## OMP
+	endif (LEGACY_SYSTEM)
 endif (NOT HEADLESS_SYSTEM)
 
 AddEngineBuild(dedicated)

@@ -29,14 +29,8 @@
 #include "Game/LoadScreen.h"
 #include "Game/UI/KeyBindings.h"
 #include "Game/UI/MouseHandler.h"
-#include "System/Input/KeyInput.h"
-#include "System/Input/MouseInput.h"
-#include "System/Input/Joystick.h"
-#include "System/MsgStrings.h"
-#include "System/NetProtocol.h"
 #include "Lua/LuaOpenGL.h"
 #include "Menu/SelectMenu.h"
-
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/glFont.h"
 #include "Rendering/GLContext.h"
@@ -49,14 +43,19 @@
 #include "System/bitops.h"
 #include "System/Config/ConfigHandler.h"
 #include "System/Exceptions.h"
-#include "System/Sync/FPUCheck.h"
 #include "System/GlobalConfig.h"
 #include "System/Log/ILog.h"
+#include "System/LogOutput.h"
 #include "System/myMath.h"
+#include "System/MsgStrings.h"
+#include "System/NetProtocol.h"
 #include "System/StartScriptGen.h"
 #include "System/TimeProfiler.h"
 #include "System/Util.h"
 #include "System/creg/creg_runtime_tests.h"
+#include "System/Input/KeyInput.h"
+#include "System/Input/MouseInput.h"
+#include "System/Input/Joystick.h"
 #include "System/FileSystem/DataDirLocater.h"
 #include "System/FileSystem/FileSystemInitializer.h"
 #include "System/FileSystem/FileHandler.h"
@@ -68,7 +67,7 @@
 #include "System/Platform/Watchdog.h"
 #include "System/Platform/WindowManagerHelper.h"
 #include "System/Sound/ISound.h"
-
+#include "System/Sync/FPUCheck.h"
 
 #ifdef WIN32
 	#include "System/Platform/Win/WinVersion.h"
@@ -169,9 +168,16 @@ SpringApp::~SpringApp()
  */
 bool SpringApp::Initialize()
 {
+	globalRendering = new CGlobalRendering();
+
+	ParseCmdLine();
+
+	CLogOutput::LogSystemInfo();
+	CMyMath::Init();
+
 #if !(defined(WIN32) || defined(__APPLE__) || defined(HEADLESS))
-	//! this MUST run before any other X11 call (esp. those by SDL!)
-	//! we need it to make calls to X11 threadsafe
+	// this MUST run before any other X11 call (esp. those by SDL!)
+	// we need it to make calls to X11 threadsafe
 	if (!XInitThreads()) {
 		LOG_L(L_FATAL, "Xlib is not thread safe");
 		return false;
@@ -196,20 +202,7 @@ bool SpringApp::Initialize()
 	// Initialize crash reporting
 	CrashHandler::Install();
 
-	globalRendering = new CGlobalRendering();
-
-	ParseCmdLine();
-	CMyMath::Init();
 	good_fpu_control_registers("::Run");
-
-	// log OS version
-	LOG("OS: %s", Platform::GetOS().c_str());
-	if (Platform::Is64Bit())
-		LOG("OS: 64bit native mode");
-	else if (Platform::Is32BitEmulation())
-		LOG("OS: emulated 32bit mode");
-	else
-		LOG("OS: 32bit native mode");
 
 	// Install Watchdog
 	Watchdog::Install();
@@ -239,7 +232,7 @@ bool SpringApp::Initialize()
 		globalRendering->FSAA = 0;
 
 	globalRendering->PostInit();
-	
+
 	InitOpenGL();
 	agui::InitGui();
 	LoadFonts();
@@ -730,6 +723,7 @@ void SpringApp::ParseCmdLine()
 	cmdline->AddSwitch(0,   "test-creg",          "Test if all CREG classes are completed");
 	cmdline->AddSwitch('i', "isolation",          "Limit the data-dir (games & maps) scanner to one directory");
 	cmdline->AddString(0,   "isolation-dir",      "Specify the isolation-mode data-dir (see --isolation)");
+	cmdline->AddString('d', "write-dir",          "Specify where Spring writes to.");
 	cmdline->AddString('g', "game",               "Specify the game that will be instantly loaded");
 	cmdline->AddString('m', "map",                "Specify the map that will be instantly loaded");
 
@@ -738,24 +732,25 @@ void SpringApp::ParseCmdLine()
 	} catch (const std::exception& err) {
 		std::cerr << err.what() << std::endl << std::endl;
 		cmdline->PrintUsage();
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	// mutually exclusive options that cause spring to quit immediately
 	if (cmdline->IsSet("help")) {
 		cmdline->PrintUsage();
-		exit(0);
+		exit(EXIT_SUCCESS);
 	}
 	if (cmdline->IsSet("version")) {
 		std::cout << "Spring " << SpringVersion::GetFull() << std::endl;
-		exit(0);
+		exit(EXIT_SUCCESS);
 	}
 	if (cmdline->IsSet("sync-version")) {
 		// Note, the missing "Spring " is intentionally to make it compatible with `spring-dedicated --sync-version`
 		std::cout << SpringVersion::GetSync() << std::endl;
-		exit(0);
+		exit(EXIT_SUCCESS);
 	}
 	if (cmdline->IsSet("projectiledump")) {
+		//FIXME must run after a game is loaded (it depends on basecontent that isn't loaded yet!)
 		CCustomExplosionGenerator::OutputProjectileClassInfo();
 		exit(0);
 	}
@@ -769,33 +764,40 @@ void SpringApp::ParseCmdLine()
 		dataDirLocater.SetIsolationModeDir(cmdline->GetString("isolation-dir"));
 	}
 
+	if (cmdline->IsSet("write-dir")) {
+		dataDirLocater.SetWriteDir(cmdline->GetString("write-dir"));
+	}
+
 	// mutually exclusive options that cause spring to quit immediately
 	if (cmdline->IsSet("list-config-vars")) {
 		ConfigVariable::OutputMetaDataMap();
-		exit(0);
+		exit(EXIT_SUCCESS);
 	}
 	else if (cmdline->IsSet("list-def-tags")) {
 		DefType::OutputTagMap();
 		exit(0);
 	}
 	else if (cmdline->IsSet("test-creg")) {
-		int res = creg::RuntimeTest() ? 0 : 1;
+		const int res = creg::RuntimeTest() ? EXIT_SUCCESS : EXIT_FAILURE;
 		exit(res);
 	}
+
+	dataDirLocater.LocateDataDirs();
+	dataDirLocater.ChangeCwdToWriteDir();
 
 	const string configSource = (cmdline->IsSet("config") ? cmdline->GetString("config") : "");
 	const bool safemode = cmdline->IsSet("safemode");
 	ConfigHandler::Instantiate(configSource, safemode);
 	GlobalConfig::Instantiate();
 
+	logOutput.Initialize();
+
 	// mutually exclusive options that cause spring to quit immediately
 	if (cmdline->IsSet("list-ai-interfaces")) {
-		dataDirLocater.LocateDataDirs();
 		IAILibraryManager::OutputAIInterfacesInfo();
 		exit(0);
 	}
 	else if (cmdline->IsSet("list-skirmish-ais")) {
-		dataDirLocater.LocateDataDirs();
 		IAILibraryManager::OutputSkirmishAIInfo();
 		exit(0);
 	}
@@ -813,7 +815,7 @@ void SpringApp::ParseCmdLine()
 	}
 
 	if (cmdline->IsSet("textureatlas")) {
-		CTextureAtlas::debug = true;
+		CTextureAtlas::SetDebug(true);
 	}
 
 	if (cmdline->IsSet("name")) {

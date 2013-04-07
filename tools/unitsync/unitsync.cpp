@@ -329,6 +329,8 @@ EXPORT(int) Init(bool isServer, int id)
 		// Cleanup data from previous Init() calls
 		_Cleanup();
 
+		CLogOutput::LogSystemInfo();
+
 		// LogSystem 1
 		if (!logOutputInitialised) {
 			logOutput.SetFileName("unitsync.log");
@@ -349,6 +351,7 @@ EXPORT(int) Init(bool isServer, int id)
 
 		// LogSystem 2
 		if (!logOutputInitialised) {
+			// must happen after FileSystemInitializer, else it will write the infolog to the wrong dir
 			logOutput.Initialize();
 			logOutputInitialised = true;
 		}

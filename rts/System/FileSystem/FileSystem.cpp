@@ -5,10 +5,15 @@
  */
 #include "FileSystem.h"
 
+#include "Game/GameVersion.h"
 #include "System/Log/ILog.h"
 #include "System/Util.h"
 
 #include <boost/regex.hpp>
+
+#ifdef _WIN32
+#include <io.h>
+#endif
 
 ////////////////////////////////////////
 ////////// FileSystem
@@ -95,6 +100,15 @@ std::string FileSystem::ConvertGlobToRegex(const std::string& glob)
 	return regex;
 }
 
+
+bool FileSystem::ComparePaths(std::string path1, std::string path2)
+{
+	FixSlashes(path1);
+	FixSlashes(path2);
+	return FileSystemAbstraction::ComparePaths(path1, path2);
+}
+
+
 bool FileSystem::FileExists(std::string file)
 {
 	FixSlashes(file);
@@ -126,6 +140,23 @@ bool FileSystem::CreateDirectory(std::string dir)
 		prev_slash = slash;
 	}
 	return FileSystemAbstraction::MkDir(dir);
+}
+
+
+bool FileSystem::TouchFile(std::string filePath)
+{
+	if (!CheckFile(filePath)) {
+		return false;
+	}
+
+	if (access(filePath.c_str(), 4) != -1) { // check for read access
+		return true;
+	}
+
+	FILE* f = fopen(filePath.c_str(), "a+b");
+	if (!f) return false;
+	fclose(f);
+	return (access(filePath.c_str(), 4) != -1); // check for read access
 }
 
 
@@ -197,7 +228,7 @@ std::string FileSystem::GetNormalizedPath(const std::string& path) {
 
 std::string& FileSystem::FixSlashes(std::string& path)
 {
-	int sep = FileSystem::GetNativePathSeparator();
+	const char sep = GetNativePathSeparator();
 	for (size_t i = 0; i < path.size(); ++i) {
 		if (path[i] == '/' || path[i] == '\\') {
 			path[i] = sep;
@@ -240,3 +271,12 @@ bool FileSystem::Remove(std::string file)
 	FixSlashes(file);
 	return FileSystem::DeleteFile(file);
 }
+
+const std::string& FileSystem::GetCacheDir()
+{
+	static const std::string cacheBase = "cache";
+	static const std::string cacheDir = cacheBase + GetNativePathSeparator() + SpringVersion::GetMajor();
+
+	return cacheDir;
+}
+

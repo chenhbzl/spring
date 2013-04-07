@@ -2,7 +2,7 @@
 
 #include "TransportUnit.h"
 #include "Game/GameHelper.h"
-#include "Game/SelectedUnits.h"
+#include "Game/SelectedUnitsHandler.h"
 #include "Map/Ground.h"
 #include "Sim/MoveTypes/MoveDefHandler.h"
 #include "Sim/MoveTypes/HoverAirMoveType.h"
@@ -296,7 +296,7 @@ void CTransportUnit::AttachUnit(CUnit* unit, int piece)
 
 	if (unit->IsStunned()) {
 		// make sure unit does not fire etc in transport
-		selectedUnits.RemoveUnit(unit);
+		selectedUnitsHandler.RemoveUnit(unit);
 	}
 
 	unit->QueUnBlock();
@@ -487,7 +487,12 @@ float CTransportUnit::GetLoadUnloadHeight(const float3& wantedPos, const CUnit* 
 	float finalHeight = contactHeight;
 
 	// *we* must be capable of reaching the point-of-contact height
-	isAllowedHeight &= unitDef->IsAllowedTerrainHeight(this->moveDef, contactHeight, &finalHeight);
+	// however this check fails for eg. ships that want to (un)load
+	// land units on shore --> would require too many special cases
+	// therefore restrict its use to transport aircraft
+	if (this->moveDef == NULL) {
+		isAllowedHeight &= unitDef->IsAllowedTerrainHeight(NULL, contactHeight, &finalHeight);
+	}
 
 	if (allowedPos != NULL) {
 		*allowedPos = isAllowedHeight;

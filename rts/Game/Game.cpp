@@ -29,7 +29,7 @@
 #include "GameSetup.h"
 #include "GlobalUnsynced.h"
 #include "LoadScreen.h"
-#include "SelectedUnits.h"
+#include "SelectedUnitsHandler.h"
 #include "Player.h"
 #include "PlayerHandler.h"
 #include "PlayerRoster.h"
@@ -103,7 +103,7 @@
 #include "Sim/Misc/Wind.h"
 #include "Sim/Misc/ResourceHandler.h"
 #include "Sim/MoveTypes/MoveDefHandler.h"
-#include "Sim/MoveTypes/GroundMoveType.h"
+#include "Sim/MoveTypes/ClassicGroundMoveType.h"
 #include "Sim/Path/IPathManager.h"
 #include "Sim/Projectiles/ExplosionGenerator.h"
 #include "Sim/Projectiles/Projectile.h"
@@ -159,6 +159,7 @@
 #include "System/TimeProfiler.h"
 
 #include <boost/cstdint.hpp>
+#include "lib/lua/include/LuaUser.h"
 
 #undef CreateDirectory
 
@@ -425,7 +426,7 @@ CGame::~CGame()
 	SafeDelete(helper);
 	SafeDelete((mapInfo = const_cast<CMapInfo*>(mapInfo)));
 
-	CGroundMoveType::DeleteLineTable();
+	CClassicGroundMoveType::DeleteLineTable();
 	CCategoryHandler::RemoveInstance();
 
 	for (unsigned int i = 0; i < grouphandlers.size(); i++) {
@@ -565,7 +566,7 @@ void CGame::PostLoadSimulation()
 	loadscreen->SetLoadMessage("Loading Unit Definitions");
 	unitDefHandler = new CUnitDefHandler();
 
-	CGroundMoveType::CreateLineTable();
+	CClassicGroundMoveType::CreateLineTable();
 
 	unitHandler = new CUnitHandler();
 	projectileHandler = new CProjectileHandler();
@@ -640,7 +641,7 @@ void CGame::LoadInterface()
 		camHandler = new CCameraHandler();
 	}
 
-	selectedUnits.Init(playerHandler->ActivePlayers());
+	selectedUnitsHandler.Init(playerHandler->ActivePlayers());
 
 	// interface components
 	ReColorTeams();
@@ -1121,7 +1122,7 @@ bool CGame::Draw() {
 		// return early if and only if less than 30K milliseconds have passed since last draw-frame
 		// so we force render two frames per minute when minimized to clear batches and free memory
 		// don't need to mess with globalRendering->active since only mouse-input code depends on it
-		if (spring_tomsecs(currentTimePreDraw - lastDrawFrameTime) < 30*1000)
+		if (spring_tomsecs(currentTimePreDraw - lastDrawFrameTime) < GAME_SPEED*1000)
 			return true;
 	}
 
@@ -1254,6 +1255,10 @@ bool CGame::Draw() {
 			} break;
 		}
 
+		int allocedBytes;
+		spring_lua_alloc_get_stats(&allocedBytes);
+		font->glFormat(0.03f, 0.15f, 0.7f, DBG_FONT_FLAGS, "Lua allocated memory: %.1fMB", allocedBytes/1024.f/1024.f);
+
 		font->End();
 	}
 
@@ -1302,7 +1307,7 @@ bool CGame::Draw() {
 			smallFont->SetColors(&speedcol, NULL);
 			smallFont->glPrint(0.99f, 0.90f, 1.0f, INF_FONT_FLAGS, buf);
 		}
-		
+
 		if (GML::SimEnabled() && mtInfoCtrl >= 5 && (showMTInfo == MT_LUA_SINGLE || showMTInfo == MT_LUA_SINGLE_BATCH || showMTInfo == MT_LUA_DUAL_EXPORT)) {
 			float pval = (showMTInfo == MT_LUA_DUAL_EXPORT) ? (float)luaExportSize / 1000.0f : (float)luaLockTime / 10.0f;
 			const char *pstr = (showMTInfo == MT_LUA_DUAL_EXPORT) ? "LUA-EXP-SIZE(MT): %2.1fK" : "LUA-SYNC-CPU(MT): %2.1f%%";
@@ -1460,7 +1465,7 @@ void CGame::StartPlaying()
 	}
 
 	eventHandler.GameStart();
-	
+
 	// This is a hack!!!
 	// Before 0.83 Lua had its GameFrame callin before gs->frameNum got updated,
 	// what caused it to have a `gameframe0` while the engine started with 1.
@@ -1950,9 +1955,11 @@ void CGame::GameEnd(const std::vector<unsigned char>& winningAllyTeams, bool tim
 			record->SetPlayerStats(i, playerHandler->Player(i)->currentStats);
 		}
 		for (int i = 0; i < numTeams; ++i) {
-			record->SetTeamStats(i, teamHandler->Team(i)->statHistory);
+			const CTeam* team = teamHandler->Team(i);
+			record->SetTeamStats(i, team->statHistory);
 			netcode::PackPacket* buf = new netcode::PackPacket(2 + sizeof(CTeam::Statistics), NETMSG_TEAMSTAT);
-			*buf << (uint8_t)teamHandler->Team(i)->teamNum << *(teamHandler->Team(i)->currentStats);
+			*buf << static_cast<uint8_t>(team->teamNum);
+			*buf << team->currentStats;
 			net->Send(buf);
 		}
 	}
@@ -2204,7 +2211,7 @@ void CGame::SelectUnits(const string& line)
 	for (int i = 0; i < (int)args.size(); i++) {
 		const string& arg = args[i];
 		if (arg == "clear") {
-			selectedUnits.ClearSelected();
+			selectedUnitsHandler.ClearSelected();
 		}
 		else if ((arg[0] == '+') || (arg[0] == '-')) {
 			char* endPtr;
@@ -2229,9 +2236,9 @@ void CGame::SelectUnits(const string& line)
 
 			// perform the selection
 			if (arg[0] == '+') {
-				selectedUnits.AddUnit(unit);
+				selectedUnitsHandler.AddUnit(unit);
 			} else {
-				selectedUnits.RemoveUnit(unit);
+				selectedUnitsHandler.RemoveUnit(unit);
 			}
 		}
 	}
@@ -2245,15 +2252,15 @@ void CGame::SelectCycle(const string& command)
 
 	GML_RECMUTEX_LOCK(sel); // SelectCycle
 
-	const CUnitSet& selUnits = selectedUnits.selectedUnits;
+	const CUnitSet& selUnits = selectedUnitsHandler.selectedUnits;
 
 	if (command == "restore") {
-		selectedUnits.ClearSelected();
+		selectedUnitsHandler.ClearSelected();
 		set<int>::const_iterator it;
 		for (it = unitIDs.begin(); it != unitIDs.end(); ++it) {
 			CUnit* unit = unitHandler->units[*it];
 			if (unit != NULL) {
-				selectedUnits.AddUnit(unit);
+				selectedUnitsHandler.AddUnit(unit);
 			}
 		}
 		return;
@@ -2266,9 +2273,9 @@ void CGame::SelectCycle(const string& command)
 		for (it = selUnits.begin(); it != selUnits.end(); ++it) {
 			unitIDs.insert((*it)->id);
 		}
-		selectedUnits.ClearSelected();
+		selectedUnitsHandler.ClearSelected();
 		lastID = *unitIDs.begin();
-		selectedUnits.AddUnit(unitHandler->units[lastID]);
+		selectedUnitsHandler.AddUnit(unitHandler->units[lastID]);
 		return;
 	}
 
@@ -2286,7 +2293,7 @@ void CGame::SelectCycle(const string& command)
 	}
 
 	// selectedUnits size is 0 or 1
-	selectedUnits.ClearSelected();
+	selectedUnitsHandler.ClearSelected();
 	if (!unitIDs.empty()) {
 		set<int>::const_iterator fit = unitIDs.find(lastID);
 		if (fit == unitIDs.end()) {
@@ -2299,7 +2306,7 @@ void CGame::SelectCycle(const string& command)
 				lastID = *unitIDs.begin();
 			}
 		}
-		selectedUnits.AddUnit(unitHandler->units[lastID]);
+		selectedUnitsHandler.AddUnit(unitHandler->units[lastID]);
 	}
 }
 
